@@ -1,5 +1,5 @@
 ---
-title: "DataMaps: Typed Template Contexts for mapres"
+title: "DataMaps: Typed Template Contexts for mapres Resolution"
 sidebarTitle: "DataMaps"
 description: "DataMaps are Python dataclasses decorated with @datamap that provide typed, structured key-value contexts for placeholder resolution in mapres."
 ---
@@ -163,7 +163,7 @@ class EnvMap:
 `as_map()` checks `providers[f.name]` first; if found and callable, it calls it. This pattern lets you inject per-instance provider logic without changing field defaults.
 
 <Note>
-`providers` itself is not emitted into the resolved map — it does not appear as a key in the output of `as_map()` because it is not a regular init field tracked by `fields()`.
+If `providers` is declared as a regular dataclass field (as shown above), it will appear as a key in the output of `as_map()` — because it is an ordinary init field tracked by `fields()`. To prevent it from being emitted, declare it with `field(init=False, repr=False)` or manage it outside the dataclass fields entirely.
 </Note>
 
 ---

@@ -1,7 +1,7 @@
 ---
 title: "Build Dynamic DataMaps with Runtime-Evaluated Values"
 sidebarTitle: "Dynamic Maps"
-description: "Dynamic mode DataMaps evaluate callable field values or provider functions at resolution time, enabling runtime context like live timestamps, counters, or external data."
+description: "Use dynamic mode DataMaps to evaluate callable fields and provider functions at resolution time for live timestamps, counters, and external data."
 ---
 
 By default, `DataMap` fields hold static values captured when the instance is created. With `mode='dynamic'`, fields can be callables or driven by a `providers` dict, evaluated fresh on every call to `as_map()`. This makes it straightforward to embed runtime context — live timestamps, incrementing counters, responses from external services — directly inside a map without changing the rest of the resolution pipeline.

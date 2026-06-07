@@ -1,7 +1,7 @@
 ---
-title: "ColorMap: ANSI and Minecraft Color Code Mapping"
+title: "ColorMap: ANSI and Minecraft Color Codes in mapres"
 sidebarTitle: "ColorMap"
-description: "mapres ships with three ready-made ColorMap instances for ANSI terminal colors, Minecraft chat color codes, and a strip-colors utility that removes all color codes."
+description: "Use ColorMap with ascii_colors, mc_colors, or strip_colors to substitute ANSI or Minecraft §-color codes via angle-bracket syntax in any mapres string."
 ---
 
 `ColorMap` is a built-in `DataMap` that uses **angle-bracket syntax** (`<color>`) to substitute color escape sequences into strings. Drop one of the pre-built instances into a `Layer` and any placeholder like `<green>` or `<reset>` is automatically replaced with the appropriate escape code at resolution time — no manual string formatting required.
@@ -51,6 +51,43 @@ All three instances share the same set of 19 keys. The table below lists each ke
 <Note>
 `strip_colors` maps every key above to an empty string `""`, so all `<color>` tags are silently removed from the resolved output.
 </Note>
+
+## The `as_dict()` method
+
+Every `ColorMap` instance exposes an `as_dict()` helper that returns a plain Python dictionary keyed in the angle-bracket format that `syntax.angles` uses. Each key is wrapped in `<` and `>`, matching the placeholder form expected by `MapResolver`:
+
+```python
+from mapres import ascii_colors
+
+d = ascii_colors.as_dict()
+# {
+#   "<black>":        "\033[30m",
+#   "<dark_blue>":    "\033[34m",
+#   "<dark_green>":   "\033[32m",
+#   ...
+#   "<reset>":        "\033[0m",
+#   "<bold>":         "\033[1m",
+#   "<italic>":       "\033[3m",
+# }
+```
+
+This is useful when you need to inspect or serialise the active color palette, or when passing the mapping directly to another component that works with plain dictionaries rather than `DataMap` instances.
+
+## The `maps` namespace
+
+All `ColorMap` exports are also available under the top-level `maps` namespace object for organised imports:
+
+```python
+import mapres
+
+# Classes and instances via maps namespace
+mapres.maps.ColorMap      # the ColorMap class itself
+mapres.maps.ascii_colors  # pre-built ANSI instance
+mapres.maps.mc_colors     # pre-built Minecraft instance
+mapres.maps.strip_colors  # pre-built strip instance
+```
+
+Using the `maps` namespace is equivalent to importing each name directly from `mapres` — the objects are identical.
 
 ## Usage with MapResolver
 

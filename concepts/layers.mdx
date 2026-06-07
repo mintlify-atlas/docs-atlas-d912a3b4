@@ -1,7 +1,7 @@
 ---
 title: "Layers and LayerStack: Priority-Ordered Map Composition"
 sidebarTitle: "Layers"
-description: "mapres resolves placeholders through a LayerStack — an ordered collection of Layers that determines lookup priority when multiple maps define the same key."
+description: "mapres resolves placeholders through a LayerStack — an ordered collection of Layers that determines lookup priority when multiple maps share a key."
 ---
 
 mapres resolves placeholders by searching through a **LayerStack** — an ordered collection of `Layer` objects. Each layer groups one or more maps (DataMap instances or plain dicts) under a name and a numeric priority. When the resolver encounters a placeholder key, it walks the layers from lowest priority number to highest: the **first** layer that contains the key wins, and all remaining layers serve as progressively lower-priority fallbacks. This lets you compose a rich, multi-source configuration from simple, single-concern maps without any manual merging.
@@ -151,7 +151,7 @@ Reserve `priority=0` for the most specific, highest-precedence data (user prefer
 When provided, `extra_maps` are wrapped in a new `Layer("extra", ..., priority=999)` and appended to a **clone** of the existing stack. Because `priority=999` is very high numerically, these maps act as **low-priority fallbacks** — consulted only when no existing layer has the key:
 
 ```python
-resolver.res("{greeting}", extra_maps=[{"greeting": "Hi", "farewell": "Bye"}])
+resolver.res("{greeting}", extra_maps={"greeting": "Hi", "farewell": "Bye"})
 ```
 
 ### `override_maps`
@@ -159,7 +159,7 @@ resolver.res("{greeting}", extra_maps=[{"greeting": "Hi", "farewell": "Bye"}])
 When provided, `override_maps` construct a **brand-new** `LayerStack` containing only a single `Layer("override", ..., priority=0)`. The resolver's own `self.layers` are **completely ignored** for that call:
 
 ```python
-resolver.res("{greeting}", override_maps=[{"greeting": "Howdy"}])
+resolver.res("{greeting}", override_maps={"greeting": "Howdy"})
 ```
 
 | Argument | Existing layers | Priority | Cache used? |
@@ -201,6 +201,6 @@ print(resolver.res("level={log_level} timeout={timeout} region={region}"))
 # → "level=WARNING timeout=60 region=us-east-1"
 
 # One-off extra fallback — won't override anything already in the stack
-print(resolver.res("{datacenter}", extra_maps=[{"datacenter": "dc-west"}]))
+print(resolver.res("{datacenter}", extra_maps={"datacenter": "dc-west"}))
 # → "dc-west"
 ```

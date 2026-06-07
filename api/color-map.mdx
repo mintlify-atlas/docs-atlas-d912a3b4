@@ -1,7 +1,7 @@
 ---
-title: "ColorMap API Reference"
+title: "ColorMap API Reference — mapres Color Formatting"
 sidebarTitle: "ColorMap"
-description: "API reference for ColorMap and the three built-in instances: ascii_colors (ANSI), mc_colors (Minecraft), and strip_colors. Uses angle-bracket syntax by default."
+description: "API reference for ColorMap and its three built-in instances: ascii_colors (ANSI), mc_colors (Minecraft), and strip_colors. Uses angle-bracket syntax."
 ---
 
 `ColorMap` is a `DataMap` subclass that maps color name tokens to ANSI escape codes or Minecraft color codes using angle-bracket syntax (`<color>`). It is the primary way to apply terminal or in-game color formatting through a `MapResolver` pipeline — every color field resolves to its corresponding escape sequence at resolution time.

@@ -1,5 +1,5 @@
 ---
-title: "MapResolver: The Core Resolution Engine"
+title: "MapResolver: mapres Template Placeholder Resolution"
 sidebarTitle: "Resolver"
 description: "MapResolver orchestrates placeholder resolution through layered maps, syntax providers, pipeline stages, context substitution, and optional LRU caching."
 ---
@@ -105,8 +105,8 @@ def res(
 | Argument | Description |
 |---|---|
 | `text` | The template string containing placeholders to resolve. |
-| `extra_maps` | A list of maps (DataMap instances or plain dicts) appended as a new `Layer` with `priority=999` — i.e. they act as **low-priority fallbacks** behind all existing layers. |
-| `override_maps` | A list of maps used to build a **completely fresh** `LayerStack` containing only a single `"override"` layer at `priority=0`. The resolver's own `self.layers` are **ignored** for this call. |
+| `extra_maps` | A `dict` of maps appended as a new `Layer` with `priority=999` — i.e. they act as **low-priority fallbacks** behind all existing layers. |
+| `override_maps` | A `dict` of maps used to build a **completely fresh** `LayerStack` containing only a single `"override"` layer at `priority=0`. The resolver's own `self.layers` are **ignored** for this call. |
 | `**ctx` | Arbitrary keyword arguments available as context for the brace-syntax context substitution step and accessible inside pipeline/syntax-provider callbacks. |
 
 ### `extra_maps` vs `override_maps`
@@ -115,10 +115,10 @@ def res(
 resolver = MapResolver(layers=LayerStack([base_layer]))
 
 # extra_maps: base_layer still consulted; extra appended as fallback
-result = resolver.res("{greeting}", extra_maps=[{"greeting": "Hi"}])
+result = resolver.res("{greeting}", extra_maps={"greeting": "Hi"})
 
 # override_maps: base_layer ignored entirely; only override_maps used
-result = resolver.res("{greeting}", override_maps=[{"greeting": "Hey"}])
+result = resolver.res("{greeting}", override_maps={"greeting": "Hey"})
 ```
 
 Both parameters bypass the cache.

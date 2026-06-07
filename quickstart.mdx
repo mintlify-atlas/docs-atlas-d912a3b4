@@ -1,7 +1,7 @@
 ---
-title: "Get Started with mapres in 5 Minutes"
+title: "mapres Quickstart: Resolve Strings with DataMaps and Layers"
 sidebarTitle: "Quickstart"
-description: "Learn how to define DataMaps, configure a MapResolver, and resolve placeholder strings with mapres in just a few lines of Python."
+description: "Learn how to define DataMaps, configure a MapResolver, and resolve placeholder strings with mapres in just a few lines of Python code."
 ---
 
 This quickstart walks you through the essential building blocks of mapres — from the zero-setup global resolver right through to layered DataMaps and the built-in color and time utilities. By the end you will have a working resolution pipeline and a clear mental model of how all the pieces fit together.
@@ -173,6 +173,42 @@ print(log_line)
 ```
 
 Available `TimeMap` keys include: `%hh%`, `%h%`, `%hh12%`, `%h12%`, `%ampm%`, `%mm%`, `%m%`, `%ss%`, `%s%`, `%ms%`, `%YYYY%`, `%MM%`, `%DD%`, and `%weekday%`.
+
+**strip_colors — remove all colour codes:**
+
+`strip_colors` is a pre-built `ColorMap` instance where every colour name maps to an empty string. Use it to strip colour placeholders from a string without producing any ANSI or Minecraft codes:
+
+```python
+from mapres import MapResolver, LayerStack, Layer, strip_colors
+
+strip_layer = Layer("colors", [strip_colors], priority=10)
+stack = LayerStack([strip_layer])
+resolver = MapResolver(layers=stack)
+
+plain = resolver.res("<green>Hello<reset>, <bold>world<reset>!")
+print(plain)
+# Hello, world!
+```
+
+**time alias and maps namespace:**
+
+The `time` export is an alias for the `TimeMap` class itself — both names refer to the same object:
+
+```python
+from mapres import time, TimeMap
+
+assert time is TimeMap  # True
+```
+
+All color and time exports are also available through the `maps` namespace object, which groups them for convenience:
+
+```python
+from mapres import maps
+
+# maps.ColorMap, maps.ascii_colors, maps.mc_colors, maps.strip_colors
+# maps.TimeMap, maps.time
+color_layer = Layer("colors", [maps.ascii_colors], priority=10)
+```
 
 </Step>
 

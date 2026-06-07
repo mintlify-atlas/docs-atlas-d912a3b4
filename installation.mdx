@@ -1,7 +1,7 @@
 ---
-title: "Install mapres in Your Python Project"
+title: "Install and Verify mapres in Your Python Environment"
 sidebarTitle: "Installation"
-description: "Install mapres from PyPI using pip. Requires Python 3.9 or later. Depends on requests, mcrcon, and PyYAML."
+description: "Install mapres from PyPI using pip. Requires Python 3.9 or later. Depends on requests, mcrcon, and PyYAML, which are installed automatically."
 ---
 
 mapres is published to [PyPI](https://pypi.org/project/mapres/) and can be installed with a single `pip` command. No build tools, no compiled extensions — just a pure-Python package that is ready to import the moment the install finishes.
@@ -12,10 +12,6 @@ mapres is published to [PyPI](https://pypi.org/project/mapres/) and can be insta
 
 ```bash pip
 pip install mapres
-```
-
-```bash pip (version pin)
-pip install mapres==2.3
 ```
 
 </CodeGroup>
@@ -52,7 +48,7 @@ import mapres
 print(mapres.__version__)
 ```
 
-If the install succeeded you will see the version string printed to stdout (for example `2.3`). If Python raises `ModuleNotFoundError`, double-check that you are using the same Python environment in which you ran `pip install`.
+If the install succeeded you will see the installed version string printed to stdout. If Python raises `ModuleNotFoundError`, double-check that you are using the same Python environment in which you ran `pip install`.
 
 ## Development install
 

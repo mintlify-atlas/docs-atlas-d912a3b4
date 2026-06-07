@@ -1,7 +1,7 @@
 ---
-title: "MapResolver API Reference"
+title: "MapResolver – mapres Core Resolution Engine Reference"
 sidebarTitle: "MapResolver"
-description: "Full API reference for MapResolver — mapres's core resolution engine. Documents the constructor, res() method, pipeline, syntax providers, and the global res() shortcut."
+description: "API reference for MapResolver, mapres's core engine. Covers constructor params, the res() method, pipeline stages, syntax providers, and the global res()."
 ---
 
 `MapResolver` is the central class in mapres. It combines layers, syntax providers, a pipeline, and context substitution into a single resolution call. When `res()` is invoked, it passes the input text through each processing stage — pipeline transforms, syntax provider substitutions, layered map lookups, and finally context variable replacement — repeating these passes recursively until the output stabilises or `max_depth` is reached.
@@ -31,10 +31,11 @@ resolver = MapResolver(
 )
 ```
 
-<ParamField path="layers" type="list | None" default="LayerStack()">
-  A `LayerStack` instance or a list of `Layer` objects that define the ordered
-  map sources used during resolution. When `None` or omitted, an empty
-  `LayerStack` is used and no map lookups are performed.
+<ParamField path="layers" type="LayerStack | None" default="LayerStack()">
+  A `LayerStack` instance that defines the ordered map sources used during
+  resolution. When `None` or omitted, an empty `LayerStack` is created
+  automatically and no map lookups are performed. Pass a pre-built `LayerStack`
+  to supply one or more `Layer` objects.
 </ParamField>
 
 <ParamField path="syntax" type="list | None" default="[]">
@@ -51,7 +52,7 @@ resolver = MapResolver(
   `MapResError`.
 </ParamField>
 
-<ParamField path="cache" type="bool" default="false">
+<ParamField path="cache" type="bool" default="False">
   When `True`, resolved results are stored in an internal LRU cache keyed by
   `(text, sorted_ctx_items)`. Cache is bypassed entirely when `extra_maps` or
   `override_maps` are supplied to `res()`.

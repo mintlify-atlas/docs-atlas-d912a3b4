@@ -1,7 +1,7 @@
 ---
-title: "mapres Exception Reference"
+title: "Exception Classes API Reference — mapres Error Handling"
 sidebarTitle: "Exceptions"
-description: "Reference for the three exception classes in mapres: MapResError (base), MissingKeyError (undefined placeholder), and MapSyntaxError (invalid regex pattern)."
+description: "Reference for the three mapres exception classes: MapResError (base), MissingKeyError (undefined placeholder), and MapSyntaxError (invalid pattern)."
 ---
 
 mapres defines three exception classes in a single hierarchy. All exceptions inherit from `MapResError`, which itself inherits from Python's built-in `Exception`. This structure lets you catch resolution errors at varying levels of specificity — from a targeted handler for missing placeholders, all the way to a broad catch-all for any mapres failure.
@@ -63,10 +63,10 @@ Regex error in syntax pattern {pattern}: {exc}
 
 ## Catching exceptions
 
-All three classes are importable directly from `mapres`:
+All three classes are importable from `mapres.exceptions`:
 
 ```python
-from mapres import MapResError, MissingKeyError, MapSyntaxError
+from mapres.exceptions import MapResError, MissingKeyError, MapSyntaxError
 from mapres import MapResolver
 
 resolver = MapResolver()

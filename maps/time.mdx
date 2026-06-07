@@ -14,8 +14,8 @@ description: "TimeMap is a built-in mapres DataMap that dynamically resolves dat
 |---|---|---|
 | `%hh%` | Hour, 24-hour, zero-padded (00–23) | `09`, `14` |
 | `%h%` | Hour, 24-hour, no padding (0–23) | `9`, `14` |
-| `%hh12%` | Hour, 12-hour, zero-padded (01–12) | `09`, `02` |
 | `%h12%` | Hour, 12-hour, no padding (1–12) | `9`, `2` |
+| `%hh12%` | Hour, 12-hour, zero-padded (01–12) | `09`, `02` |
 | `%ampm%` | AM or PM indicator | `AM`, `PM` |
 | `%mm%` | Minute, zero-padded (00–59) | `05`, `47` |
 | `%m%` | Minute, no padding (0–59) | `5`, `47` |
@@ -103,6 +103,20 @@ result = resolver.res("Berlin time: %hh%:%mm%")
 ```
 
 `time` is a direct reference to the `TimeMap` class — not an instance — so `time()` and `TimeMap()` are completely interchangeable.
+
+## The `maps` namespace
+
+`TimeMap` and its `time` alias are also available under the top-level `maps` namespace object for organised imports:
+
+```python
+import mapres
+
+# Access via maps namespace
+mapres.maps.TimeMap  # the TimeMap class
+mapres.maps.time     # alias for TimeMap (also the class, not an instance)
+```
+
+Both `maps.TimeMap` and `maps.time` refer to the class itself — call them with `()` to produce an instance, optionally passing a `tz` string.
 
 ## Dynamic evaluation
 

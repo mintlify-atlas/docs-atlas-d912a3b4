@@ -1,7 +1,7 @@
 ---
-title: "Transform Strings with the Resolution Pipeline"
+title: "Transform Strings with the mapres Resolution Pipeline"
 sidebarTitle: "Pipeline"
-description: "The mapres pipeline lets you chain custom text transformation functions that run before map substitution, enabling preprocessing, sanitization, and custom logic."
+description: "Chain custom text transformation stages in the mapres pipeline to preprocess and sanitize strings before any map substitution occurs."
 ---
 
 The pipeline is a list of callables executed in order before syntax providers and map substitution. Each stage receives the current text, the context dict (`ctx`), and the `MapResolver` instance — giving you full control over the string before any placeholder replacement occurs.
