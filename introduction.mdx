@@ -1,0 +1,48 @@
+---
+title: "mapres: Powerful Python String-Mapping Utility"
+sidebarTitle: "Introduction"
+description: "mapres resolves placeholder strings with layered DataMaps, multiple syntax styles, pipeline transforms, and built-in color and time utilities."
+---
+
+mapres is a structured string-resolution library for Python that goes far beyond simple text substitution. Where `str.format()` accepts only loose keyword arguments and Jinja2 requires a full template engine, mapres lets you define **typed DataMap dataclasses** that carry their own placeholder syntax, stack them into a **priority-ordered LayerStack**, and run every resolution through an optional **pipeline** of transform stages — all without a templating language or external renderer. The result is a lightweight, composable system that keeps your data models and your string-formatting logic in the same place.
+
+## How mapres is different
+
+| Feature | `str.format()` | Jinja2 | **mapres** |
+|---|---|---|---|
+| Typed data contexts | ❌ | ❌ | ✅ `@datamap` dataclasses |
+| Priority-ordered layers | ❌ | ❌ | ✅ `LayerStack` |
+| Multiple placeholder syntaxes | ❌ | ❌ | ✅ `{…}`, `${…}`, `<…>`, `%…%` |
+| Built-in color & time maps | ❌ | ❌ | ✅ `ColorMap`, `TimeMap` |
+| Pipeline transforms | ❌ | Filters only | ✅ Arbitrary callables |
+| LRU resolution cache | ❌ | ❌ | ✅ Optional, configurable |
+
+## Key concepts
+
+<CardGroup cols={2}>
+  <Card title="DataMaps" icon="database" href="/concepts/datamaps">
+    Typed `@datamap` dataclasses that expose a key-value map and declare their own placeholder syntax.
+  </Card>
+  <Card title="Resolver" icon="gear" href="/concepts/resolver">
+    `MapResolver` — the core engine that runs pipeline stages, syntax providers, layered maps, and context substitution in order.
+  </Card>
+  <Card title="Layers" icon="layer-group" href="/concepts/layers">
+    `Layer` and `LayerStack` let you compose multiple DataMaps with explicit priorities so higher-priority values always win.
+  </Card>
+  <Card title="Syntax styles" icon="code" href="/concepts/syntax">
+    Four built-in placeholder formats — braces `{key}`, dollars `${key}`, angles `<key>`, and percents `%key%` — selectable per DataMap.
+  </Card>
+</CardGroup>
+
+## What you can build
+
+mapres was designed for real-world automation scenarios where string content is dynamic, typed, and comes from multiple sources at once:
+
+- **Minecraft server message formatting** — Combine `mc_colors` with player-data DataMaps to produce fully coloured in-game broadcasts, using the `§` Minecraft colour codes automatically.
+- **Terminal output formatting** — Use `ascii_colors` and `ColorMap` to inject ANSI escape sequences into log lines and CLI output without manual string concatenation.
+- **Config file templating** — Stack environment-specific layers (dev, staging, prod) and resolve YAML or TOML config values against a shared base DataMap without duplicating keys.
+- **Dynamic log messages** — Attach a `TimeMap` layer so every resolved log line includes a live timestamp formatted to your preferred timezone and precision.
+
+<Note>
+  mapres requires **Python 3.9 or later**. It is tested against Python 3.10, 3.11, and 3.12.
+</Note>

@@ -1,0 +1,157 @@
+---
+title: "Syntax Patterns: Placeholder Styles in mapres"
+sidebarTitle: "Syntax"
+description: "mapres supports four built-in placeholder syntax styles — braces, dollars, angles, and percents — plus custom regex patterns for any template format."
+---
+
+mapres is not tied to a single placeholder style. Instead of hard-coding `{key}` or `${key}` into the engine, every DataMap declares its own **syntax pattern** — a Python regex string with one capture group that tells the resolver how to identify and extract placeholder keys. The `syntax` class ships four ready-made patterns covering the most common template conventions, and you can supply any custom regex for anything else.
+
+---
+
+## Built-in patterns
+
+The `syntax` class in `mapres.datamap` defines four class attributes:
+
+```python
+class syntax:
+    braces   = r"\{([^{}]+)\}"       # {key}
+    dollars  = r"\$\{([^{}]+)\}"     # ${key}
+    angles   = r"<([^<>]+)>"         # <key>
+    percents = r"%([^%]+)%"          # %key%
+```
+
+| Attribute | Pattern | Matches | Example |
+|---|---|---|---|
+| `syntax.braces` | `r"\{([^{}]+)\}"` | `{key}` | `Hello, {name}!` |
+| `syntax.dollars` | `r"\$\{([^{}]+)\}"` | `${key}` | `url = ${base_url}/path` |
+| `syntax.angles` | `r"<([^<>]+)>"` | `<key>` | `color = <primary>` |
+| `syntax.percents` | `r"%([^%]+)%"` | `%key%` | `title = %app_name%` |
+
+Each pattern uses a **negated character class** inside the capture group (e.g. `[^{}]+`) to prevent greedy matching from swallowing adjacent placeholders.
+
+You can import `syntax` directly from `mapres`:
+
+```python
+from mapres import syntax
+
+print(syntax.braces)    # \{([^{}]+)\}
+print(syntax.angles)    # <([^<>]+)>
+print(syntax.dollars)   # \$\{([^{}]+)\}
+print(syntax.percents)  # %([^%]+)%
+```
+
+---
+
+## Setting syntax on a DataMap
+
+Pass the `syntax` parameter to `@datamap` (or use a shortcut decorator) to declare which placeholder style your map uses:
+
+```python
+from mapres import datamap, syntax
+
+# Explicit syntax parameter
+@datamap(syntax=syntax.dollars)
+class ShellStyleMap:
+    home: str = "/home/user"
+    editor: str = "vim"
+
+# Equivalent shortcut
+@datamap.dollars
+class ShellStyleMap:
+    home: str = "/home/user"
+    editor: str = "vim"
+
+# Resolve: "${home}/.bashrc" → "/home/user/.bashrc"
+```
+
+All four shortcut decorators are pre-wired to their respective patterns:
+
+```python
+@datamap.braces    # syntax=syntax.braces
+@datamap.angles    # syntax=syntax.angles
+@datamap.dollars   # syntax=syntax.dollars
+@datamap.percents  # syntax=syntax.percents
+```
+
+---
+
+## Custom patterns
+
+Any valid Python regex string containing **exactly one capture group** works as a syntax pattern. This lets you support proprietary or unusual template formats without any changes to the resolver:
+
+```python
+from mapres import datamap
+
+# Double-curly-brace Mustache/Jinja-style: {{key}}
+@datamap(syntax=r"\{\{([^{}]+)\}\}")
+class MustacheMap:
+    site_name: str = "Acme Corp"
+    year: str = "2025"
+
+# Colon-prefix style: :key
+@datamap(syntax=r":([A-Za-z_][A-Za-z0-9_]*)")
+class RouteMap:
+    user_id: str = "42"
+    post_id: str = "99"
+```
+
+<Warning>
+Your pattern must contain **exactly one** capture group (one pair of unescaped parentheses). Zero groups means the resolver has nothing to extract as a key; more than one group produces unexpected multi-group tuples from `re.sub`. Test custom patterns with `re.findall(pattern, sample)` before use.
+</Warning>
+
+---
+
+## Syntax resolution order
+
+When the resolver processes a template string through its layered maps, it collects the `__syntax__` value from every DataMap in the stack and builds a de-duplicated list of patterns. Each pattern is applied independently — so a single template string can contain placeholders in multiple styles as long as the maps that own each style are present in the stack:
+
+```python
+from mapres import MapResolver, Layer, LayerStack, datamap, syntax
+
+@datamap.braces
+class AppMap:
+    app_name: str = "MyApp"
+
+@datamap.dollars
+class EnvMap:
+    db_host: str = "db.internal"
+
+stack = LayerStack([
+    Layer("app", maps=[AppMap()], priority=0),
+    Layer("env", maps=[EnvMap()], priority=10),
+])
+resolver = MapResolver(layers=stack)
+
+# Both syntaxes resolved in one call
+result = resolver.res("App: {app_name} | DB: ${db_host}")
+# → "App: MyApp | DB: db.internal"
+```
+
+**Context substitution** (the final step, driven by `**ctx` kwargs) **always uses `syntax.braces`** regardless of which syntax the DataMaps in the stack declare. This is a fixed convention in the resolver's `_apply_ctx()` method:
+
+```python
+# From resolver.py — context step always uses braces
+pattern = syntax.braces
+```
+
+So `{key}` in a template is always eligible for context substitution, even when all your DataMaps use a different pattern.
+
+<Tip>
+Use `syntax.angles` (angle-bracket style) for maps like `ColorMap` that operate inside text which already contains `{` and `}` (f-string remnants, JSON fragments) or `${` (shell scripts, GitHub Actions). Angle brackets rarely conflict with other templating systems.
+</Tip>
+
+---
+
+## Quick reference
+
+<CardGroup cols={2}>
+  <Card title="DataMaps" href="/concepts/datamaps">
+    Learn how `@datamap` sets `__syntax__` on your dataclass and how `as_map()` uses it.
+  </Card>
+  <Card title="Resolver" href="/concepts/resolver">
+    See how `MapResolver` collects syntax patterns from the LayerStack and applies them in order.
+  </Card>
+  <Card title="Layers" href="/concepts/layers">
+    Understand how multiple DataMaps with different syntax styles coexist in a LayerStack.
+  </Card>
+</CardGroup>

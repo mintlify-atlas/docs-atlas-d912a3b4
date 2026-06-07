@@ -1,0 +1,113 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "mapres",
+  "projectDescription": "A powerful Python string-templating and mapping utility that resolves placeholders using layered data maps, custom syntax patterns, pipelines, and built-in color and time maps.",
+  "theme": "luma",
+  "primaryColor": "#4F6BED",
+  "lightColor": "#7B93F5",
+  "darkColor": "#2E47C4",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/datamaps",
+              "concepts/resolver",
+              "concepts/layers",
+              "concepts/syntax"
+            ]
+          },
+          {
+            "group": "Built-in Maps",
+            "pages": [
+              "maps/color",
+              "maps/time"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/pipeline",
+              "guides/caching",
+              "guides/dynamic-maps"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core",
+            "pages": [
+              "api/map-resolver",
+              "api/datamap",
+              "api/layers"
+            ]
+          },
+          {
+            "group": "Maps",
+            "pages": [
+              "api/color-map",
+              "api/time-map"
+            ]
+          },
+          {
+            "group": "Exceptions",
+            "pages": [
+              "api/exceptions"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Flexible placeholder resolution with multiple built-in syntax styles (braces, dollars, angles, percents)",
+    "Layered map system with priority ordering for override and fallback resolution",
+    "DataMap decorator (@datamap) for defining typed template contexts as Python dataclasses",
+    "Pipeline system for chaining custom text transformation stages",
+    "Built-in ColorMap for ANSI terminal and Minecraft color code substitution",
+    "Built-in TimeMap for dynamic date/time placeholder resolution with timezone support",
+    "LRU caching for high-throughput repeated resolution",
+    "Recursive multi-pass resolution up to a configurable depth",
+    "Global convenience resolver (res) for zero-setup usage"
+  ],
+  "publicApiSurface": [
+    "MapResolver(layers, syntax, pipeline, cache, cache_size, max_depth)",
+    "MapResolver.res(text, extra_maps, override_maps, **ctx)",
+    "res(text, **ctx)",
+    "DataMap",
+    "@datamap",
+    "@datamap(syntax, mode)",
+    "datamap.braces / datamap.angles / datamap.dollars / datamap.percents",
+    "syntax.braces / syntax.dollars / syntax.angles / syntax.percents",
+    "Layer(name, maps, priority)",
+    "LayerStack(layers)",
+    "LayerStack.add_layer(layer)",
+    "LayerStack.remove_layer(name)",
+    "LayerStack.get_layer(name)",
+    "LayerStack.clone()",
+    "ColorMap",
+    "ascii_colors",
+    "mc_colors",
+    "strip_colors",
+    "TimeMap(tz)",
+    "time",
+    "MapResError",
+    "MissingKeyError",
+    "MapSyntaxError",
+    "maps namespace (maps.ColorMap, maps.TimeMap, maps.ascii_colors, maps.mc_colors, maps.strip_colors, maps.time)"
+  ]
+}

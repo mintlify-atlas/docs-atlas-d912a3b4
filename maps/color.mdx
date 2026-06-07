@@ -1,0 +1,131 @@
+---
+title: "ColorMap: ANSI and Minecraft Color Code Mapping"
+sidebarTitle: "ColorMap"
+description: "mapres ships with three ready-made ColorMap instances for ANSI terminal colors, Minecraft chat color codes, and a strip-colors utility that removes all color codes."
+---
+
+`ColorMap` is a built-in `DataMap` that uses **angle-bracket syntax** (`<color>`) to substitute color escape sequences into strings. Drop one of the pre-built instances into a `Layer` and any placeholder like `<green>` or `<reset>` is automatically replaced with the appropriate escape code at resolution time — no manual string formatting required.
+
+## Available instances
+
+mapres exports three ready-to-use `ColorMap` instances that cover the most common use cases:
+
+| Instance | Description |
+|---|---|
+| `ascii_colors` | ANSI escape codes for terminal / TTY output (e.g. `\033[92m` for green) |
+| `mc_colors` | Minecraft §-prefixed chat color codes (e.g. `§a` for green) |
+| `strip_colors` | Replaces every color tag with an empty string, producing plain unstyled text |
+
+Import any of them directly from the `mapres` package:
+
+```python
+from mapres import ascii_colors, mc_colors, strip_colors
+```
+
+## Color keys
+
+All three instances share the same set of 19 keys. The table below lists each key together with its ANSI escape code and its Minecraft equivalent.
+
+| Key | ANSI code | Minecraft code |
+|---|---|---|
+| `black` | `\033[30m` | `§0` |
+| `dark_blue` | `\033[34m` | `§1` |
+| `dark_green` | `\033[32m` | `§2` |
+| `dark_aqua` | `\033[36m` | `§3` |
+| `dark_red` | `\033[31m` | `§4` |
+| `dark_purple` | `\033[35m` | `§5` |
+| `gold` | `\033[33m` | `§6` |
+| `gray` | `\033[37m` | `§7` |
+| `dark_gray` | `\033[90m` | `§8` |
+| `blue` | `\033[94m` | `§9` |
+| `green` | `\033[92m` | `§a` |
+| `aqua` | `\033[96m` | `§b` |
+| `red` | `\033[91m` | `§c` |
+| `light_purple` | `\033[95m` | `§d` |
+| `yellow` | `\033[93m` | `§e` |
+| `white` | `\033[97m` | `§f` |
+| `reset` | `\033[0m` | `§r` |
+| `bold` | `\033[1m` | `§l` |
+| `italic` | `\033[3m` | `§o` |
+
+<Note>
+`strip_colors` maps every key above to an empty string `""`, so all `<color>` tags are silently removed from the resolved output.
+</Note>
+
+## Usage with MapResolver
+
+Wrap `ascii_colors` (or any other instance) in a `Layer`, build a `LayerStack`, and pass it to `MapResolver`. Call `resolver.res()` with a string containing angle-bracket color placeholders:
+
+```python
+from mapres import MapResolver, Layer, LayerStack
+from mapres import ascii_colors
+
+stack = LayerStack([Layer("colors", [ascii_colors])])
+resolver = MapResolver(layers=stack)
+result = resolver.res("<green>Success!<reset> Build complete.")
+```
+
+`result` will contain the ANSI-coloured string ready for printing to a terminal:
+
+```
+\033[92mSuccess!\033[0m Build complete.
+```
+
+<Note>
+`ColorMap` registers itself with `syntax.angles` — the regex `<([^<>]+)>`. Only text wrapped in angle brackets is treated as a placeholder; the rest of the string is passed through unchanged.
+</Note>
+
+## Minecraft color codes
+
+Swap `ascii_colors` for `mc_colors` to produce strings formatted for Minecraft chat or server console messages. The API is identical:
+
+```python
+from mapres import MapResolver, Layer, LayerStack
+from mapres import mc_colors
+
+stack = LayerStack([Layer("colors", [mc_colors])])
+resolver = MapResolver(layers=stack)
+
+motd = resolver.res("<gold>Welcome<reset> to the server! Type <green>/help<reset> to get started.")
+# "§6Welcome§r to the server! Type §a/help§r to get started."
+```
+
+The resulting string uses `§`-prefixed codes that Minecraft's text rendering engine understands natively.
+
+## Stripping colors
+
+Use `strip_colors` when you need a plain-text version of a colored template — for example, writing to a log file or sending to a downstream system that does not interpret escape codes:
+
+```python
+from mapres import MapResolver, Layer, LayerStack
+from mapres import strip_colors
+
+stack = LayerStack([Layer("colors", [strip_colors])])
+resolver = MapResolver(layers=stack)
+
+plain = resolver.res("<red>Error:<reset> file not found.")
+# "Error: file not found."
+```
+
+Because every key maps to `""`, all color tags disappear and the surrounding text is preserved exactly as written.
+
+## Custom ColorMap
+
+`ColorMap` is itself a `DataMap` decorated with `@datamap(syntax=syntax.angles)`, which means you can instantiate it with any combination of overridden field values to build your own color palette:
+
+```python
+from mapres.maps.color import ColorMap
+
+# Example: 256-colour xterm codes for a richer palette
+my_colors = ColorMap(
+    green="\033[38;5;82m",
+    red="\033[38;5;196m",
+    reset="\033[0m",
+)
+```
+
+Pass the custom instance into a `Layer` exactly the same way as the built-in instances. All unspecified keys keep their default ANSI values.
+
+<Note>
+`ColorMap` always uses angle-bracket syntax (`syntax.angles`) regardless of which instance you use or how you override individual color values. If you need a different delimiter, create a new class with `@datamap(syntax=syntax.braces)` (or another syntax variant) that mirrors the `ColorMap` field layout.
+</Note>

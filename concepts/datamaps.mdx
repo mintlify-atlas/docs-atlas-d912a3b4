@@ -1,0 +1,187 @@
+---
+title: "DataMaps: Typed Template Contexts for mapres"
+sidebarTitle: "DataMaps"
+description: "DataMaps are Python dataclasses decorated with @datamap that provide typed, structured key-value contexts for placeholder resolution in mapres."
+---
+
+A **DataMap** is a typed Python dataclass that acts as a template context for mapres. By decorating a plain class with `@datamap`, you turn it into a structured container whose fields become the key-value pairs available for placeholder substitution. DataMaps carry their own syntax preference and resolution mode alongside the data itself, making them self-describing units that the resolver can consume without any additional configuration.
+
+## The DataMap base class
+
+Every DataMap ultimately inherits from `DataMap`, a thin base class defined in `mapres.datamap`:
+
+```python
+from dataclasses import dataclass, fields
+
+@dataclass
+class DataMap:
+    """Core datamap class. Contains logic used to make datamaps"""
+    __syntax__: str = syntax.braces  # default: r"\{([^{}]+)\}"
+    __mode__: str | None = None
+```
+
+Two special fields control how the DataMap behaves at resolution time:
+
+| Field | Type | Default | Purpose |
+|---|---|---|---|
+| `__syntax__` | `str` | `syntax.braces` | Regex pattern (with one capture group) used to match placeholders |
+| `__mode__` | `str \| None` | `None` | Set to `"dynamic"` to enable callable-based providers |
+
+Neither field appears in the resolved map — they are filtered out by `as_map()`.
+
+### `as_map()`
+
+`as_map()` converts the dataclass instance into a plain dictionary that the resolver operates on:
+
+```python
+def as_map(self):
+    result = {}
+    for f in fields(self):
+        if not f.init or f.name in ("__syntax__", "__mode__"):
+            continue
+        val = getattr(self, f.name)
+        if self.__mode__ == "dynamic":
+            providers = getattr(self, "providers", None)
+            if isinstance(providers, dict) and f.name in providers:
+                val = providers[f.name]
+            if callable(val):
+                val = val()
+        result[f.name] = val
+    return result
+```
+
+Key behaviours:
+- Fields named `__syntax__` and `__mode__` are always excluded.
+- Non-init fields (e.g. `field(init=False, ...)`) are excluded.
+- In `dynamic` mode, callable values — and any callable found in the `providers` dict — are called immediately and replaced with their return value.
+
+---
+
+## The `@datamap` decorator
+
+The `@datamap` decorator is the main entry point for creating DataMaps. It wraps your class, injects `__syntax__` and `__mode__`, makes it inherit from `DataMap`, and applies `@dataclass` — all in one step.
+
+### Form 1 — bare decorator
+
+```python
+from mapres import datamap
+
+@datamap
+class GreetingMap:
+    greeting: str = "Hello"
+    name: str = "World"
+```
+
+Uses the default syntax (`syntax.braces`) and no special mode.
+
+### Form 2 — decorator with options
+
+```python
+from mapres import datamap, syntax
+
+@datamap(syntax=syntax.angles, mode=None)
+class GreetingMap:
+    greeting: str = "Hello"
+    name: str = "World"
+```
+
+The full signature of `datamap` is:
+
+```python
+def datamap(
+    _cls=None,
+    *,
+    syntax: str = syntax.braces,
+    mode: bool | None = None,
+):
+    ...
+```
+
+- **`syntax`** — any regex string with exactly one capture group (see [Syntax Patterns](/concepts/syntax)).
+- **`mode`** — pass `"dynamic"` to enable provider resolution; `None` (default) for static fields.
+
+### Form 3 — shortcut decorators
+
+Four pre-configured shortcuts are attached directly to `datamap`:
+
+```python
+datamap.braces   = datamap(syntax=syntax.braces)    # {key}
+datamap.angles   = datamap(syntax=syntax.angles)    # <key>
+datamap.dollars  = datamap(syntax=syntax.dollars)   # ${key}
+datamap.percents = datamap(syntax=syntax.percents)  # %key%
+```
+
+Usage:
+
+```python
+from mapres import datamap
+
+@datamap.angles
+class PathMap:
+    base_url: str = "https://example.com"
+    version: str = "v2"
+```
+
+---
+
+## Dynamic mode
+
+Setting `mode="dynamic"` tells `as_map()` to resolve callable field values at the moment resolution is requested rather than when the dataclass is instantiated. This is useful for timestamps, random values, environment lookups, or any value that must be fresh on every call.
+
+### Using callables as field defaults
+
+```python
+import time
+from mapres import datamap
+
+@datamap(mode="dynamic")
+class TimestampMap:
+    timestamp: callable = time.time
+```
+
+When `as_map()` is called, `timestamp` field holds the callable `time.time`. Because `__mode__ == "dynamic"`, `as_map()` calls `time.time()` and stores the returned float.
+
+### Using the `providers` dict
+
+You can also supply a separate `providers` dictionary on the instance. Any key present in `providers` overrides the field value before the callable check:
+
+```python
+from mapres import datamap
+
+@datamap(mode="dynamic")
+class EnvMap:
+    db_host: str = "localhost"
+    providers: dict = None  # populated at runtime
+
+    def __post_init__(self):
+        import os
+        self.providers = {
+            "db_host": lambda: os.environ.get("DB_HOST", "localhost"),
+        }
+```
+
+`as_map()` checks `providers[f.name]` first; if found and callable, it calls it. This pattern lets you inject per-instance provider logic without changing field defaults.
+
+<Note>
+`providers` itself is not emitted into the resolved map — it does not appear as a key in the output of `as_map()` because it is not a regular init field tracked by `fields()`.
+</Note>
+
+---
+
+## Custom syntax
+
+`__syntax__` accepts **any** valid Python regex string as long as it contains **exactly one capture group**. The capture group is what the resolver extracts as the placeholder key.
+
+```python
+from mapres import datamap
+
+# Double-curly-brace style: {{key}}
+@datamap(syntax=r"\{\{([^{}]+)\}\}")
+class MustacheMap:
+    site_name: str = "My Site"
+    tagline: str = "Built with mapres"
+```
+
+<Warning>
+If your regex has zero or more than one capture group, `re.sub` will either fail to extract a key or return an unexpected match. Always test custom patterns with `re.findall(pattern, sample_text)` before deploying.
+</Warning>

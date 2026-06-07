@@ -1,47 +1,193 @@
 ---
-title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+title: "Get Started with mapres in 5 Minutes"
+sidebarTitle: "Quickstart"
+description: "Learn how to define DataMaps, configure a MapResolver, and resolve placeholder strings with mapres in just a few lines of Python."
 ---
 
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
-
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
-
-## Prerequisites
-
-Before you begin, you must have:
-
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
-
-## Get started
+This quickstart walks you through the essential building blocks of mapres — from the zero-setup global resolver right through to layered DataMaps and the built-in color and time utilities. By the end you will have a working resolution pipeline and a clear mental model of how all the pieces fit together.
 
 <Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
 
-    ```bash
-    npm install your-package
-    ```
-  </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
+<Step title="Install and import mapres">
 
-    ```bash
-    your-cli init
-    ```
-  </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
+Install the package from PyPI if you have not already done so, then import what you need:
 
-    ```bash
-    your-cli start
-    ```
-  </Step>
+```bash
+pip install mapres
+```
+
+```python
+import mapres
+
+# Or import specific names directly:
+from mapres import MapResolver, LayerStack, Layer, datamap, syntax
+from mapres import ColorMap, ascii_colors, mc_colors, TimeMap
+```
+
+</Step>
+
+<Step title="Resolve strings with the global res() shortcut">
+
+The fastest way to use mapres requires zero configuration. The module-level `res()` function wraps a default `MapResolver` with no layers and resolves `{key}` placeholders from keyword arguments you pass directly:
+
+```python
+from mapres import res
+
+result = res("Hello, {name}!", name="World")
+print(result)
+# Hello, World!
+
+# Multiple placeholders work the same way
+greeting = res("Good morning, {first} {last}!", first="Ada", last="Lovelace")
+print(greeting)
+# Good morning, Ada Lovelace!
+```
+
+<Note>
+  The global `res()` function uses a default resolver with no layers — pass values as keyword arguments. For layered DataMaps, syntax providers, or pipeline transforms, create a `MapResolver` instance directly (see the next steps).
+</Note>
+
+</Step>
+
+<Step title="Define a typed DataMap">
+
+A DataMap is a regular Python dataclass decorated with `@datamap`. It carries its own placeholder syntax and exposes all its fields as a resolved key-value map via `as_map()`. Choose a syntax style per class using the built-in `syntax` constants:
+
+```python
+from mapres import datamap, syntax
+
+@datamap(syntax=syntax.braces)   # placeholders look like {key}
+class PlayerMap:
+    name: str = "Steve"
+    level: int = 1
+    rank: str = "Member"
+
+# Instantiate with specific values
+player = PlayerMap(name="Herobrine", level=42, rank="Admin")
+
+# Inspect the resolved map
+print(player.as_map())
+# {'name': 'Herobrine', 'level': 42, 'rank': 'Admin'}
+```
+
+The four available syntax styles are:
+
+| Constant | Pattern | Example |
+|---|---|---|
+| `syntax.braces` | `{key}` | `{name}` |
+| `syntax.dollars` | `${key}` | `${name}` |
+| `syntax.angles` | `<key>` | `<name>` |
+| `syntax.percents` | `%key%` | `%name%` |
+
+You can also use the decorator shortcut forms `@datamap.braces`, `@datamap.angles`, `@datamap.dollars`, and `@datamap.percents` without passing arguments.
+
+</Step>
+
+<Step title="Build a LayerStack and resolve with MapResolver">
+
+For real applications you will compose multiple DataMaps into a `LayerStack`, where each `Layer` has a **priority** — lower numbers are applied first, and higher-priority layers win when the same key exists in more than one layer. Pass the stack to a `MapResolver` and call `resolver.res()`:
+
+```python
+from mapres import MapResolver, LayerStack, Layer, datamap, syntax
+
+@datamap(syntax=syntax.braces)
+class ServerMap:
+    server_name: str = "My Server"
+    motd: str = "Welcome!"
+
+@datamap(syntax=syntax.braces)
+class PlayerMap:
+    name: str = "Steve"
+    rank: str = "Member"
+
+# Create layers with explicit priorities
+server_layer = Layer("server", [ServerMap()], priority=10)
+player_layer = Layer("player", [PlayerMap(name="Herobrine", rank="Admin")], priority=20)
+
+# Stack the layers (higher priority = consulted last, wins on conflict)
+stack = LayerStack([server_layer, player_layer])
+
+# Create the resolver and resolve a string
+resolver = MapResolver(layers=stack)
+result = resolver.res("[{server_name}] {name} ({rank}) joined — {motd}")
+print(result)
+# [My Server] Herobrine (Admin) joined — Welcome!
+```
+
+You can also pass `extra_maps` or `override_maps` at call-time without modifying the base stack:
+
+```python
+# Temporarily inject an extra layer for one call
+result = resolver.res("{server_name}: {event}", extra_maps={"event": "Server restart"})
+print(result)
+# My Server: Server restart
+```
+
+</Step>
+
+<Step title="Use the built-in ColorMap and TimeMap">
+
+mapres ships two ready-made DataMaps. `ColorMap` uses `<key>` syntax and maps colour names to ANSI escape codes (or Minecraft `§` codes). `TimeMap` uses `%key%` syntax and dynamically provides live date and time values.
+
+**ColorMap — terminal ANSI colours:**
+
+```python
+from mapres import MapResolver, LayerStack, Layer, ascii_colors
+
+color_layer = Layer("colors", [ascii_colors], priority=10)
+stack = LayerStack([color_layer])
+resolver = MapResolver(layers=stack)
+
+message = resolver.res("<green>Server started<reset> in <yellow>{ms}ms<reset>", ms=42)
+print(message)
+# (prints "Server started" in green, "42ms" in yellow, rest reset)
+```
+
+**ColorMap — Minecraft § codes:**
+
+```python
+from mapres import MapResolver, LayerStack, Layer, mc_colors
+
+mc_layer = Layer("mc_colors", [mc_colors], priority=10)
+stack = LayerStack([mc_layer])
+resolver = MapResolver(layers=stack)
+
+broadcast = resolver.res("<gold>[<red>ALERT<gold>]<white> {player} was banned.", player="Griefer99")
+print(broadcast)
+# §6[§cALERT§6]§f Griefer99 was banned.
+```
+
+**TimeMap — live timestamps:**
+
+```python
+from mapres import MapResolver, LayerStack, Layer, TimeMap
+
+# TimeMap accepts an optional IANA timezone string
+time_layer = Layer("time", [TimeMap(tz="America/New_York")], priority=10)
+stack = LayerStack([time_layer])
+resolver = MapResolver(layers=stack)
+
+log_line = resolver.res("[%YYYY%-%MM%-%DD% %hh%:%mm%:%ss%] Server heartbeat OK")
+print(log_line)
+# [2024-07-15 14:32:07] Server heartbeat OK
+```
+
+Available `TimeMap` keys include: `%hh%`, `%h%`, `%hh12%`, `%h12%`, `%ampm%`, `%mm%`, `%m%`, `%ss%`, `%s%`, `%ms%`, `%YYYY%`, `%MM%`, `%DD%`, and `%weekday%`.
+
+</Step>
+
 </Steps>
 
-<Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
+## Next steps
 
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
-</Tip>
+<CardGroup cols={3}>
+  <Card title="Core Concepts" icon="book" href="/concepts/datamaps">
+    Deep-dive into DataMaps, LayerStack priority resolution, and the full MapResolver API.
+  </Card>
+  <Card title="Built-in Maps" icon="palette" href="/maps/color">
+    Explore all ColorMap colour names, Minecraft colour codes, and the complete TimeMap token reference.
+  </Card>
+  <Card title="Pipeline Guide" icon="pipe-section" href="/guides/pipeline">
+    Learn how to chain transform stages through the MapResolver pipeline to pre- or post-process resolved strings.
+  </Card>
+</CardGroup>

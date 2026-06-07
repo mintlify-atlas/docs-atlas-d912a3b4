@@ -1,0 +1,67 @@
+---
+title: "Install mapres in Your Python Project"
+sidebarTitle: "Installation"
+description: "Install mapres from PyPI using pip. Requires Python 3.9 or later. Depends on requests, mcrcon, and PyYAML."
+---
+
+mapres is published to [PyPI](https://pypi.org/project/mapres/) and can be installed with a single `pip` command. No build tools, no compiled extensions — just a pure-Python package that is ready to import the moment the install finishes.
+
+## Installation
+
+<CodeGroup>
+
+```bash pip
+pip install mapres
+```
+
+```bash pip (version pin)
+pip install mapres==2.3
+```
+
+</CodeGroup>
+
+## Requirements
+
+mapres has the following requirements:
+
+| Requirement | Version |
+|---|---|
+| Python | `>= 3.9` |
+| `requests` | latest compatible |
+| `mcrcon` | latest compatible |
+| `PyYaml` | latest compatible |
+
+These dependencies are declared in `pyproject.toml` and are installed automatically by pip — you do not need to install them separately.
+
+<Tip>
+  It is good practice to install mapres inside a **virtual environment** so its dependencies do not conflict with other projects on your system.
+
+  ```bash
+  python -m venv .venv
+  source .venv/bin/activate   # Windows: .venv\Scripts\activate
+  pip install mapres
+  ```
+</Tip>
+
+## Verifying the installation
+
+After installing, confirm that mapres is importable and check the version that was installed:
+
+```python
+import mapres
+print(mapres.__version__)
+```
+
+If the install succeeded you will see the version string printed to stdout (for example `2.3`). If Python raises `ModuleNotFoundError`, double-check that you are using the same Python environment in which you ran `pip install`.
+
+## Development install
+
+To contribute to mapres or run the latest unreleased code, clone the repository and install the package in editable mode:
+
+```bash
+git clone https://github.com/iFamishedX/mapres
+cd mapres
+pip install -e .
+```
+
+Editable mode (`-e`) means Python imports the package directly from your local `src/mapres` directory, so any changes you make to the source files are reflected immediately without reinstalling.

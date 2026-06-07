@@ -1,0 +1,126 @@
+---
+title: "TimeMap: Dynamic Date and Time Placeholder Resolution"
+sidebarTitle: "TimeMap"
+description: "TimeMap is a built-in mapres DataMap that dynamically resolves date and time placeholders using %percent% syntax with optional timezone support."
+---
+
+`TimeMap` provides live date and time values as placeholders inside any string resolved by a `MapResolver`. Unlike static `DataMap` instances whose values are fixed at creation time, `TimeMap` evaluates each placeholder's lambda **at resolution time** — so every call to `resolver.res()` reflects the actual current clock reading rather than a snapshot taken when the map was constructed.
+
+## Available placeholders
+
+`TimeMap` exposes 14 placeholders wrapped in `%percent%` delimiters. All values are derived from `datetime.now()` in the configured timezone.
+
+| Placeholder | Format | Example |
+|---|---|---|
+| `%hh%` | Hour, 24-hour, zero-padded (00–23) | `09`, `14` |
+| `%h%` | Hour, 24-hour, no padding (0–23) | `9`, `14` |
+| `%hh12%` | Hour, 12-hour, zero-padded (01–12) | `09`, `02` |
+| `%h12%` | Hour, 12-hour, no padding (1–12) | `9`, `2` |
+| `%ampm%` | AM or PM indicator | `AM`, `PM` |
+| `%mm%` | Minute, zero-padded (00–59) | `05`, `47` |
+| `%m%` | Minute, no padding (0–59) | `5`, `47` |
+| `%ss%` | Second, zero-padded (00–59) | `00`, `38` |
+| `%s%` | Second, no padding (0–59) | `0`, `38` |
+| `%ms%` | Milliseconds, zero-padded (000–999) | `007`, `512` |
+| `%YYYY%` | Four-digit year | `2024` |
+| `%MM%` | Month, zero-padded (01–12) | `01`, `11` |
+| `%DD%` | Day of month, zero-padded (01–31) | `03`, `27` |
+| `%weekday%` | Full weekday name | `Monday`, `Friday` |
+
+## Basic usage
+
+Instantiate `TimeMap`, place it inside a `Layer`, and resolve any string that contains `%placeholder%` tokens:
+
+```python
+from mapres import MapResolver, Layer, LayerStack
+from mapres import TimeMap
+
+stack = LayerStack([Layer("time", [TimeMap()])])
+resolver = MapResolver(layers=stack)
+result = resolver.res("%YYYY%-%MM%-%DD% %hh%:%mm%:%ss%")
+# e.g. "2024-06-15 14:30:22"
+```
+
+You can mix time placeholders freely with other text, and combine `TimeMap` with additional maps in the same `LayerStack`:
+
+```python
+result = resolver.res("Log entry [%YYYY%-%MM%-%DD% %hh%:%mm%:%ss%]: process started.")
+# e.g. "Log entry [2024-06-15 14:30:22]: process started."
+```
+
+## Timezone support
+
+`TimeMap` accepts an optional `tz` keyword argument — an **IANA timezone name** string. When provided, all datetime values are computed in that timezone via Python's `zoneinfo.ZoneInfo`. The default timezone is `UTC`.
+
+```python
+TimeMap(tz="America/New_York")
+TimeMap(tz="Europe/London")
+TimeMap(tz="Asia/Tokyo")
+```
+
+A practical example logging timestamps in two timezones simultaneously:
+
+```python
+from mapres import MapResolver, Layer, LayerStack
+from mapres import TimeMap
+
+utc_map = TimeMap(tz="UTC")
+ny_map  = TimeMap(tz="America/New_York")
+
+utc_stack = LayerStack([Layer("time", [utc_map])])
+ny_stack  = LayerStack([Layer("time", [ny_map])])
+
+utc_resolver = MapResolver(layers=utc_stack)
+ny_resolver  = MapResolver(layers=ny_stack)
+
+print(utc_resolver.res("UTC:       %hh%:%mm%:%ss%"))
+print(ny_resolver.res( "New York:  %hh%:%mm%:%ss%"))
+```
+
+<Note>
+If `tz` is omitted or `None`, `TimeMap` defaults to `UTC` using `ZoneInfo('UTC')`. Pass an explicit IANA name whenever local or regional time is required.
+</Note>
+
+## The `time` convenience alias
+
+mapres re-exports `TimeMap` under the shorter alias `time`, making it ergonomic to use without the longer class name:
+
+```python
+from mapres import time
+
+# Equivalent to TimeMap()
+default_time = time()
+
+# Equivalent to TimeMap(tz="UTC")
+utc_time = time(tz="UTC")
+
+# Works identically in a LayerStack
+from mapres import MapResolver, Layer, LayerStack
+
+stack = LayerStack([Layer("time", [time(tz="Europe/Berlin")])])
+resolver = MapResolver(layers=stack)
+result = resolver.res("Berlin time: %hh%:%mm%")
+```
+
+`time` is a direct reference to the `TimeMap` class — not an instance — so `time()` and `TimeMap()` are completely interchangeable.
+
+## Dynamic evaluation
+
+`TimeMap` is decorated with `@datamap(syntax=syntax.percents, mode='dynamic')`. The `mode='dynamic'` setting tells the `DataMap` resolution engine to invoke each field's provider lambda on **every** call to `as_map()`, rather than caching a static value.
+
+Concretely, each placeholder in the `providers` property is a zero-argument lambda that calls `datetime.now(self.TZ)` fresh each time:
+
+```python
+'ss': lambda: f'{now().second:02d}',  # evaluated at resolution time
+```
+
+This means two successive calls to `resolver.res()` with `%ss%` can — and often will — return different values if a second boundary is crossed between them. The map never goes stale.
+
+<Tip>
+If you enable LRU caching on your `MapResolver` (`cache=True`), identical input strings will return the **cached** resolved output rather than re-evaluating the time lambdas. Disable caching or use unique cache keys when you need per-call accuracy for timestamps:
+
+```python
+# Caching disabled — every .res() call evaluates time freshly
+resolver = MapResolver(layers=stack, cache=False)
+```
+</Tip>

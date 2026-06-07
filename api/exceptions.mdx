@@ -1,0 +1,85 @@
+---
+title: "mapres Exception Reference"
+sidebarTitle: "Exceptions"
+description: "Reference for the three exception classes in mapres: MapResError (base), MissingKeyError (undefined placeholder), and MapSyntaxError (invalid regex pattern)."
+---
+
+mapres defines three exception classes in a single hierarchy. All exceptions inherit from `MapResError`, which itself inherits from Python's built-in `Exception`. This structure lets you catch resolution errors at varying levels of specificity — from a targeted handler for missing placeholders, all the way to a broad catch-all for any mapres failure.
+
+## Exception hierarchy
+
+```
+Exception
+└── MapResError
+    ├── MissingKeyError
+    └── MapSyntaxError
+```
+
+## MapResError
+
+`MapResError` is the base exception class for all mapres resolution failures. It is raised directly for any error not covered by the more specific subclasses — for example, unhandled exceptions propagating out of pipeline stages or unexpected internal errors. When catching resolution errors generically, catching `MapResError` is sufficient.
+
+```python
+class MapResError(Exception):
+    pass
+```
+
+**When raised:** Any mapres resolution failure not attributed to a missing key or a regex syntax error.
+
+## MissingKeyError
+
+`MissingKeyError` is raised when the resolver encounters a placeholder token in the input string whose key cannot be found in any registered layer, syntax provider, or context dictionary passed at resolution time. It inherits directly from `MapResError`.
+
+```python
+class MissingKeyError(MapResError):
+    pass
+```
+
+**When raised:** A placeholder such as `{name}` or `<color>` appears in the string being resolved, but no layer, context dict, or provider supplies a value for that key.
+
+**Message formats:**
+
+```
+Missing key '{key}' in any layer or context
+Missing key '{key}' in syntax provider {provider}
+```
+
+## MapSyntaxError
+
+`MapSyntaxError` is raised when a regular expression error occurs while processing a syntax pattern or during a pipeline stage. This can happen if a custom syntax pattern passed to `DataMap` or a pipeline step contains an invalid regex. It inherits directly from `MapResError`.
+
+```python
+class MapSyntaxError(MapResError):
+    pass
+```
+
+**When raised:** A regex compilation or matching error occurs when applying a syntax pattern to the input string.
+
+**Message format:**
+
+```
+Regex error in syntax pattern {pattern}: {exc}
+```
+
+## Catching exceptions
+
+All three classes are importable directly from `mapres`:
+
+```python
+from mapres import MapResError, MissingKeyError, MapSyntaxError
+from mapres import MapResolver
+
+resolver = MapResolver()
+try:
+    result = resolver.res("Hello {name}")
+except MissingKeyError as e:
+    print(f"Missing placeholder: {e}")
+except MapSyntaxError as e:
+    print(f"Syntax error: {e}")
+except MapResError as e:
+    print(f"Resolution failed: {e}")
+```
+
+<Tip>
+  Catch `MapResError` as a single catch-all whenever you want to handle any mapres resolution failure without distinguishing between missing keys and syntax errors. Because both `MissingKeyError` and `MapSyntaxError` inherit from `MapResError`, a single `except MapResError` block covers all three exception types.
+</Tip>

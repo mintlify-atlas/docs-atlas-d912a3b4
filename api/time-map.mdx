@@ -1,0 +1,117 @@
+---
+title: "TimeMap API Reference"
+sidebarTitle: "TimeMap"
+description: "API reference for TimeMap — a dynamic DataMap with 14 date and time placeholders using percent syntax, with optional IANA timezone configuration."
+---
+
+`TimeMap` is a dynamic `DataMap` (`mode='dynamic'`) that evaluates date and time values at resolution time using `%percent%` syntax. Unlike static `DataMap` instances whose values are fixed at construction, `TimeMap` providers are callable lambdas that call `datetime.now()` each time a placeholder is resolved, ensuring the current time is always returned.
+
+## Import
+
+```python
+from mapres import TimeMap, time
+# or via the maps namespace:
+from mapres import maps
+maps.TimeMap
+maps.time
+```
+
+## TimeMap class
+
+`TimeMap` extends `DataMap` and is decorated with `@datamap(syntax=syntax.percents, mode='dynamic')`. This configures it to match `%name%` tokens and to evaluate each field's value dynamically via the `providers` property rather than using a stored string.
+
+### Constructor
+
+<ParamField body="tz" type="str | None" optional>
+  An IANA timezone string (e.g. `'UTC'`, `'America/New_York'`, `'Europe/London'`) used to determine what time is returned by all placeholders. Defaults to `'UTC'` when not provided or set to `None`.
+</ParamField>
+
+```python
+# Default — UTC timezone
+tm = TimeMap()
+
+# Specific timezone
+tm = TimeMap(tz='America/New_York')
+tm = TimeMap(tz='Europe/London')
+```
+
+### `providers` property
+
+Returns a `dict` mapping each field name to a zero-argument lambda that calls `datetime.now(self.TZ)` and formats the result. Every provider is re-evaluated on each resolution call.
+
+```python
+tm = TimeMap(tz='UTC')
+providers = tm.providers
+# {
+#   'hh':   <lambda>,  # returns '14' (zero-padded hour)
+#   'h':    <lambda>,  # returns '14' (no padding)
+#   ...
+# }
+```
+
+## Placeholder reference
+
+All 14 placeholders available in `TimeMap`, referenced in strings as `%name%`:
+
+| Placeholder | Description | Example output |
+|---|---|---|
+| `%hh%` | Hour in 24-hour format, zero-padded (`00`–`23`) | `08`, `14`, `23` |
+| `%h%` | Hour in 24-hour format, no padding (`0`–`23`) | `8`, `14`, `23` |
+| `%hh12%` | Hour in 12-hour format, zero-padded (`01`–`12`) | `08`, `02`, `12` |
+| `%h12%` | Hour in 12-hour format, no padding (`1`–`12`) | `8`, `2`, `12` |
+| `%ampm%` | AM or PM indicator | `AM`, `PM` |
+| `%mm%` | Minutes, zero-padded (`00`–`59`) | `05`, `30`, `59` |
+| `%m%` | Minutes, no padding (`0`–`59`) | `5`, `30`, `59` |
+| `%ss%` | Seconds, zero-padded (`00`–`59`) | `00`, `07`, `45` |
+| `%s%` | Seconds, no padding (`0`–`59`) | `0`, `7`, `45` |
+| `%ms%` | Milliseconds, zero-padded (`000`–`999`) | `000`, `042`, `999` |
+| `%YYYY%` | Full 4-digit year | `2024`, `2025` |
+| `%MM%` | Month number, zero-padded (`01`–`12`) | `01`, `07`, `12` |
+| `%DD%` | Day of month, zero-padded (`01`–`31`) | `01`, `15`, `31` |
+| `%weekday%` | Full weekday name | `Monday`, `Friday` |
+
+## `time` alias
+
+`time` is a direct alias for the `TimeMap` class — it is not a pre-constructed instance, but the class itself. This makes it convenient to use in a MapResolver without importing `TimeMap` explicitly.
+
+```python
+from mapres import time
+
+# These are exactly equivalent:
+tm1 = time()
+tm2 = TimeMap()
+
+# With a timezone:
+tm3 = time(tz='Asia/Tokyo')
+```
+
+## Usage example
+
+```python
+from mapres import MapResolver, TimeMap
+
+# UTC resolver (default)
+resolver = MapResolver(TimeMap())
+print(resolver.res("Current time: %hh%:%mm%:%ss%"))
+# Current time: 14:05:32
+
+# Timezone-aware resolver
+resolver_ny = MapResolver(TimeMap(tz='America/New_York'))
+print(resolver_ny.res("Date: %YYYY%-%MM%-%DD% (%weekday%)"))
+# Date: 2025-06-10 (Tuesday)
+
+# 12-hour clock with AM/PM
+print(resolver_ny.res("Time: %h12%:%mm% %ampm%"))
+# Time: 2:05 PM
+
+# Combine with other layers
+from mapres import ascii_colors
+
+resolver = MapResolver(TimeMap(tz='UTC'), ascii_colors)
+print(resolver.res("<green>%YYYY%-%MM%-%DD%<reset>"))
+# \033[92m2025-06-10\033[0m
+```
+
+<Warning>
+  **Caching and TimeMap** — do not enable LRU caching on a resolver that uses `TimeMap`. Because `TimeMap` is dynamic, its placeholder values change with every call to `datetime.now()`. Cached results will contain stale timestamps from the moment the result was first cached, causing incorrect output on subsequent calls.
+</Warning>

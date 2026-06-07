@@ -1,0 +1,260 @@
+---
+title: "DataMap and @datamap Decorator API Reference"
+sidebarTitle: "DataMap"
+description: "API reference for the DataMap base class, the @datamap decorator, the syntax class, and all decorator shortcut forms for defining typed template contexts."
+---
+
+`DataMap` is the base class for all template contexts in mapres. It is a
+dataclass subclass that pairs structured field definitions with a regex syntax
+pattern, allowing `MapResolver` to extract placeholder keys and substitute them
+with the correct values. The `@datamap` decorator transforms any ordinary Python
+class into a `DataMap`-backed dataclass without requiring manual inheritance or
+`@dataclass` usage.
+
+## Import
+
+```python
+from mapres import DataMap, datamap, syntax
+```
+
+---
+
+## `syntax` class
+
+The `syntax` class is a plain namespace that exposes four pre-built regex
+patterns, each targeting a different placeholder style. Pass any of these as the
+`syntax` argument to `@datamap` or `MapResolver`.
+
+| Attribute | Pattern | Matches |
+|---|---|---|
+| `syntax.braces` | `r"\{([^{}]+)\}"` | `{key}` |
+| `syntax.dollars` | `r"\$\{([^{}]+)\}"` | `${key}` |
+| `syntax.angles` | `r"<([^<>]+)>"` | `<key>` |
+| `syntax.percents` | `r"%([^%]+)%"` | `%key%` |
+
+```python
+from mapres import syntax
+
+print(syntax.braces)   # \{([^{}]+)\}
+print(syntax.dollars)  # \$\{([^{}]+)\}
+print(syntax.angles)   # <([^<>]+)>
+print(syntax.percents) # %([^%]+)%
+```
+
+<Tip>
+  `syntax.braces` is the default used by both `DataMap` and the global `res()`
+  function. Choose a different pattern only when your template strings contain
+  literal curly braces that must not be treated as placeholders.
+</Tip>
+
+---
+
+## `DataMap` base class
+
+`DataMap` is a dataclass with two reserved class-level attributes that control
+how a resolver identifies and evaluates its fields.
+
+### Class attributes
+
+<ParamField path="__syntax__" type="str" default="syntax.braces">
+  The regex pattern used by `MapResolver` to identify placeholders that should
+  be replaced with values from this map. Captured group 1 of each match is
+  treated as the field name. Defaults to `syntax.braces` (`{key}` style).
+</ParamField>
+
+<ParamField path="__mode__" type="str | None" default="None">
+  Controls how field values are evaluated when `as_map()` is called. When set
+  to `"dynamic"`, callable fields are invoked with no arguments and their return
+  values are used in place of the raw callable. When `None` (the default),
+  fields are returned as-is regardless of whether they are callable.
+</ParamField>
+
+### Methods
+
+#### `as_map() -> dict`
+
+Returns a flat dictionary mapping each field name to its resolved value.
+Fields named `__syntax__` and `__mode__` are always excluded. In `"dynamic"`
+mode, callable values are called and their results are used; if a `providers`
+dict attribute is present on the instance, provider entries take precedence over
+the raw field values.
+
+```python
+@datamap
+class Config:
+    host: str = "localhost"
+    port: int = 8080
+
+cfg = Config()
+print(cfg.as_map())
+# {'host': 'localhost', 'port': 8080}
+```
+
+#### `get_syntax() -> str` *(classmethod)*
+
+Returns the `__syntax__` pattern for the class, falling back to `syntax.braces`
+if the attribute is not set. `MapResolver` calls this method internally when
+building the list of patterns to apply during map resolution.
+
+```python
+print(Config.get_syntax())
+# \{([^{}]+)\}
+```
+
+---
+
+## `@datamap` decorator
+
+The `@datamap` decorator wraps any class, sets `__syntax__` and `__mode__` on
+it, re-creates it as a subclass of `DataMap`, and then applies `@dataclass` to
+it. The result is a fully functional dataclass whose instances can be dropped
+directly into a `Layer`.
+
+### Forms
+
+#### Bare decorator — `@datamap`
+
+Applied directly to a class with no arguments. Uses `syntax.braces` for the
+placeholder pattern and `mode=None`.
+
+```python
+from mapres import datamap
+
+@datamap
+class AppConfig:
+    name: str = "MyApp"
+    region: str = "us-east-1"
+
+cfg = AppConfig()
+print(cfg.as_map())  # {'name': 'MyApp', 'region': 'us-east-1'}
+```
+
+#### Decorator with options — `@datamap(syntax=..., mode=...)`
+
+Called with keyword arguments to customise the placeholder syntax or evaluation
+mode.
+
+<ParamField path="syntax" type="str" default="syntax.braces">
+  The regex pattern to assign to `__syntax__`. Accepts any string value,
+  including the pre-built constants from the `syntax` class.
+</ParamField>
+
+<ParamField path="mode" type="bool | None" default="None">
+  Pass `"dynamic"` to enable callable field evaluation inside `as_map()`.
+  Any other value (including `None`) leaves fields unevaluated.
+</ParamField>
+
+```python
+from mapres import datamap, syntax
+
+@datamap(syntax=syntax.angles, mode=None)
+class HtmlContext:
+    title: str = "Home"
+    lang: str = "en"
+
+ctx = HtmlContext()
+print(ctx.get_syntax())  # <([^<>]+)>
+print(ctx.as_map())      # {'title': 'Home', 'lang': 'en'}
+```
+
+### Shortcut attributes
+
+`datamap` exposes four pre-configured decorator shortcuts, one for each entry in
+the `syntax` class. Each shortcut is equivalent to calling
+`@datamap(syntax=syntax.<name>)`.
+
+| Shortcut | Equivalent to |
+|---|---|
+| `datamap.braces` | `@datamap(syntax=syntax.braces)` |
+| `datamap.angles` | `@datamap(syntax=syntax.angles)` |
+| `datamap.dollars` | `@datamap(syntax=syntax.dollars)` |
+| `datamap.percents` | `@datamap(syntax=syntax.percents)` |
+
+```python
+from mapres import datamap
+
+@datamap.angles
+class XmlContext:
+    element: str = "div"
+    attribute: str = "class"
+
+ctx = XmlContext()
+print(ctx.get_syntax())  # <([^<>]+)>
+```
+
+<Warning>
+  Shortcut decorators cannot accept further arguments. If you need to set both
+  a custom syntax pattern and `mode="dynamic"`, use the full
+  `@datamap(syntax=..., mode=...)` form instead.
+</Warning>
+
+---
+
+## Code examples
+
+### Bare decorator
+
+```python
+from mapres import datamap, MapResolver, Layer, LayerStack
+
+@datamap
+class Env:
+    tier: str = "production"
+    replicas: int = 3
+
+resolver = MapResolver(
+    layers=LayerStack([Layer("env", [Env()], priority=0)])
+)
+
+result = resolver.res("Tier: {tier}, replicas: {replicas}")
+print(result)
+# Tier: production, replicas: 3
+```
+
+### Decorator with options
+
+```python
+from mapres import datamap, syntax, MapResolver, Layer, LayerStack
+
+@datamap(syntax=syntax.dollars, mode=None)
+class BuildVars:
+    commit: str = "a1b2c3d"
+    branch: str = "main"
+
+resolver = MapResolver(
+    layers=LayerStack([Layer("build", [BuildVars()], priority=0)])
+)
+
+result = resolver.res("Branch: ${branch} @ ${commit}")
+print(result)
+# Branch: main @ a1b2c3d
+```
+
+### Dynamic mode with callable fields
+
+In `"dynamic"` mode, fields whose values are callables are invoked at
+`as_map()` time, making it easy to inject runtime-computed values.
+
+```python
+import time
+from mapres import datamap, MapResolver, Layer, LayerStack
+
+@datamap(mode="dynamic")
+class RuntimeContext:
+    timestamp: object = time.time   # callable — called on each as_map()
+    label: str = "build"
+
+resolver = MapResolver(
+    layers=LayerStack([Layer("rt", [RuntimeContext()], priority=0)])
+)
+
+result = resolver.res("Job {label} started at {timestamp}")
+print(result)
+# Job build started at 1718000000.123456
+```
+
+<Note>
+  Each call to `as_map()` in `"dynamic"` mode invokes the callable afresh.
+  This means two resolution passes on the same template may produce different
+  values if the callable is not pure (e.g., `time.time` or `uuid.uuid4`).
+</Note>

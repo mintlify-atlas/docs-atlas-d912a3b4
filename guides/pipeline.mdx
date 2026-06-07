@@ -1,0 +1,126 @@
+---
+title: "Transform Strings with the Resolution Pipeline"
+sidebarTitle: "Pipeline"
+description: "The mapres pipeline lets you chain custom text transformation functions that run before map substitution, enabling preprocessing, sanitization, and custom logic."
+---
+
+The pipeline is a list of callables executed in order before syntax providers and map substitution. Each stage receives the current text, the context dict (`ctx`), and the `MapResolver` instance — giving you full control over the string before any placeholder replacement occurs.
+
+## Pipeline stage signature
+
+Every pipeline stage must accept exactly three positional arguments and return the transformed string:
+
+```python
+def my_stage(text: str, ctx: dict, resolver: MapResolver) -> str:
+    # transform text however you like
+    return text
+```
+
+| Argument   | Type          | Description                                      |
+|------------|---------------|--------------------------------------------------|
+| `text`     | `str`         | The current string, as it stands at this stage   |
+| `ctx`      | `dict`        | The keyword arguments passed to `resolver.res()` |
+| `resolver` | `MapResolver` | The resolver instance (see [Accessing the resolver](#accessing-the-resolver-inside-a-stage)) |
+
+The return value becomes the input for the next stage in the pipeline, or proceeds to map substitution if this is the last stage.
+
+## Configuring a pipeline
+
+Pass a list of stage callables to the `pipeline` parameter of `MapResolver`:
+
+```python
+from mapres import MapResolver
+
+def uppercase_stage(text, ctx, resolver):
+    return text.upper()
+
+resolver = MapResolver(pipeline=[uppercase_stage])
+result = resolver.res("hello {name}", name="world")
+# → "HELLO {NAME}" (note: pipeline runs before substitution)
+```
+
+<Warning>
+Pipeline stages run **before** map substitution, so placeholders like `{key}` are still present in the text when your stage receives it. Be careful not to accidentally consume or corrupt them during transformation.
+</Warning>
+
+## Practical example — sanitize HTML entities before substitution
+
+A common use case is escaping or stripping content before a template is filled in. For example, you may want to neutralize any HTML entities embedded in raw input:
+
+```python
+import html
+from mapres import MapResolver
+
+def html_escape_stage(text, ctx, resolver):
+    # Escape any HTML special characters already in the template string
+    return html.escape(text, quote=False)
+
+resolver = MapResolver(pipeline=[html_escape_stage])
+result = resolver.res("Alert: {message}", message="<script>bad</script>")
+# → "Alert: &lt;script&gt;bad&lt;/script&gt;"
+```
+
+## Multiple stages
+
+Chain as many stages as you need by listing them in the order they should execute. Each stage receives the output of the previous one:
+
+```python
+from mapres import MapResolver
+
+def strip_stage(text, ctx, resolver):
+    return text.strip()
+
+def uppercase_stage(text, ctx, resolver):
+    return text.upper()
+
+resolver = MapResolver(pipeline=[strip_stage, uppercase_stage])
+result = resolver.res("  hello {name}  ", name="world")
+# strip_stage fires first → "hello {name}"
+# uppercase_stage fires second → "HELLO {NAME}"
+# map substitution fires last → "HELLO WORLD"
+```
+
+Stages are applied strictly in list order, so placement matters — put normalization stages (whitespace trimming, encoding fixes) before any stages that inspect content.
+
+## Error handling
+
+If any pipeline stage raises an exception, `MapResolver` catches it and re-raises it as a `MapResError` with a descriptive message:
+
+```python
+from mapres import MapResolver
+from mapres.exceptions import MapResError
+
+def broken_stage(text, ctx, resolver):
+    raise ValueError("something went wrong")
+
+resolver = MapResolver(pipeline=[broken_stage])
+
+try:
+    resolver.res("hello {name}", name="world")
+except MapResError as e:
+    print(e)  # → "Pipeline stage failed: something went wrong"
+```
+
+This means you can always catch `MapResError` (or its subclasses `MissingKeyError` and `MapSyntaxError`) at the call site, regardless of what the underlying stage raised.
+
+## Accessing the resolver inside a stage
+
+The third argument to every stage is the live `MapResolver` instance. This gives you read access to `resolver.layers`, `resolver.syntax`, `resolver.pipeline`, and `resolver.max_depth` from inside a stage — useful for context-aware transformations:
+
+```python
+from mapres import MapResolver, LayerStack, Layer
+
+def layer_aware_stage(text, ctx, resolver):
+    # Inspect how many layers are registered
+    layer_count = len(resolver.layers.layers)
+    if layer_count == 0:
+        return text.upper()   # no layers, shout it
+    return text               # layers present, leave it alone
+
+resolver = MapResolver(pipeline=[layer_aware_stage])
+result = resolver.res("hello {name}", name="world")
+```
+
+<Note>
+The resolver passed to a stage is the **same instance** that is executing the resolution. Modifying `resolver.pipeline` or `resolver.layers` from within a stage affects subsequent resolution calls on the same resolver, so prefer read-only access unless you intentionally want that side effect.
+</Note>

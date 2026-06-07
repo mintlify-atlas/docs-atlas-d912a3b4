@@ -1,0 +1,220 @@
+---
+title: "Layer and LayerStack API Reference"
+sidebarTitle: "Layers"
+description: "API reference for the Layer and LayerStack classes — mapres's priority-ordered composition system for combining multiple DataMaps and plain dicts into a single resolution source."
+---
+
+`Layer` and `LayerStack` manage how multiple maps are combined for resolution.
+Each `Layer` groups one or more `DataMap` instances or plain dicts under a named
+bucket and assigns it a numeric priority. A `LayerStack` holds a collection of
+layers and presents them to `MapResolver` in ascending priority order — lower
+priority numbers are queried first — so higher-priority data can shadow keys
+defined in lower-priority layers.
+
+## Import
+
+```python
+from mapres import Layer, LayerStack
+```
+
+---
+
+## `Layer` class
+
+A `Layer` is a named container for one or more map sources. When the resolver
+iterates maps, it walks each layer in priority order, then walks the maps within
+that layer in insertion order.
+
+### Constructor — `Layer(name, maps, priority)`
+
+```python
+base = Layer("base", [BaseConfig()], priority=10)
+```
+
+<ParamField path="name" type="str" required>
+  A unique string identifier for this layer within its `LayerStack`. When
+  `add_layer()` is called with a layer whose name already exists in the stack,
+  the existing layer is replaced entirely.
+</ParamField>
+
+<ParamField path="maps" type="list | None" default="[]">
+  The list of map sources to include in this layer. Each element may be a
+  `DataMap` instance (or `DataMap` subclass instance) or a plain Python `dict`.
+  When `None` or omitted, the layer starts empty and maps can be added later via
+  `add()`.
+</ParamField>
+
+<ParamField path="priority" type="int" default="0">
+  A numeric priority value. **Lower numbers are queried first** (higher
+  priority). For example, a layer at `priority=0` is consulted before a layer
+  at `priority=10`. Layers with equal priority values are sorted by insertion
+  order into the `LayerStack`.
+</ParamField>
+
+### Methods
+
+#### `add(m)`
+
+Appends a single map source — a `DataMap` instance or a plain `dict` — to this
+layer's `maps` list.
+
+```python
+layer = Layer("config")
+layer.add({"timeout": 30})
+layer.add(MyDataMap())
+```
+
+---
+
+## `LayerStack` class
+
+A `LayerStack` is an ordered registry of `Layer` objects. It exposes a stable
+dictionary-backed store keyed by layer name and presents maps to the resolver
+through a priority-sorted generator.
+
+### Constructor — `LayerStack(layers)`
+
+```python
+stack = LayerStack([base_layer, override_layer])
+```
+
+<ParamField path="layers" type="list | None" default="None">
+  An optional list of `Layer` objects to seed the stack. Layers are stored
+  internally in a dict keyed by `layer.name`. If two layers in the seed list
+  share a name, the last one wins.
+</ParamField>
+
+### Methods
+
+#### `add_layer(layer: Layer)`
+
+Inserts a new layer into the stack, or replaces the existing layer that has the
+same name. After insertion the stack's iteration order is always re-derived from
+priority values, so there is no need to insert layers in any particular order.
+
+```python
+stack.add_layer(Layer("feature-flags", [FlagsMap()], priority=5))
+```
+
+#### `remove_layer(name: str)`
+
+Removes the layer with the given name from the stack. A no-op if no layer with
+that name exists.
+
+```python
+stack.remove_layer("feature-flags")
+```
+
+#### `get_layer(name: str) -> Layer | None`
+
+Returns the `Layer` registered under `name`, or `None` if no such layer exists.
+Useful for mutating an existing layer (e.g., calling `layer.add()` on it)
+without rebuilding the whole stack.
+
+```python
+layer = stack.get_layer("base")
+if layer:
+    layer.add({"extra_key": "value"})
+```
+
+#### `clone() -> LayerStack`
+
+Returns a new `LayerStack` containing the same `Layer` object references as the
+original. The clone is a **shallow copy** — the `LayerStack` itself is new, but
+the `Layer` objects and their `maps` lists are shared.
+
+```python
+temp_stack = stack.clone()
+temp_stack.add_layer(Layer("temp", [{"debug": True}], priority=999))
+# Original `stack` is unaffected.
+```
+
+<Note>
+  `MapResolver.res()` uses `clone()` internally when `extra_maps` is provided,
+  ensuring that the resolver's primary stack is never mutated by a single
+  resolution call.
+</Note>
+
+#### `all_maps()`
+
+A generator that yields every map source across all layers in ascending priority
+order (lowest priority number first). Within a layer, maps are yielded in
+insertion order. `MapResolver` drives its layered lookup by iterating this
+generator.
+
+```python
+for m in stack.all_maps():
+    print(m)
+```
+
+#### `__iter__`
+
+Delegates to `all_maps()`, making a `LayerStack` directly iterable in `for`
+loops and comprehensions.
+
+```python
+maps_list = list(stack)
+```
+
+---
+
+## Code example — two-layer stack
+
+The following example builds a stack with a base configuration layer and a
+higher-priority override layer, then passes it to a `MapResolver`.
+
+```python
+from mapres import datamap, Layer, LayerStack, MapResolver
+
+# Base configuration — lowest priority (queried second)
+@datamap
+class BaseConfig:
+    host: str = "db.internal"
+    port: int = 5432
+    pool_size: int = 10
+
+# Environment-specific overrides — highest priority (queried first)
+@datamap
+class EnvOverride:
+    pool_size: int = 25   # shadows BaseConfig.pool_size
+
+base_layer     = Layer("base",     [BaseConfig()],   priority=10)
+override_layer = Layer("override", [EnvOverride()],  priority=0)
+
+stack = LayerStack([base_layer, override_layer])
+resolver = MapResolver(layers=stack)
+
+template = "Connecting to {host}:{port} with pool={pool_size}"
+print(resolver.res(template))
+# Connecting to db.internal:5432 with pool=25
+```
+
+Here, `pool_size` comes from `EnvOverride` (priority 0) while `host` and `port`
+fall through to `BaseConfig` (priority 10) because `EnvOverride` does not define
+them.
+
+```python
+# Inspecting the stack
+print(stack.get_layer("base").priority)      # 10
+print(stack.get_layer("override").priority)  # 0
+
+# Removing a layer at runtime
+stack.remove_layer("override")
+print(resolver.res(template))
+# Connecting to db.internal:5432 with pool=10
+```
+
+<Note>
+  Layers with the same `priority` value are sorted by insertion order, relying
+  on the guaranteed key ordering of Python `dict` objects (Python 3.7+). To
+  ensure deterministic lookup behaviour, assign distinct priority values to each
+  layer.
+</Note>
+
+<Tip>
+  You can pass a plain `dict` directly as a map source inside a layer without
+  wrapping it in a `DataMap`. The resolver will read it using the `syntax` key
+  from the resolution context if one is present, falling back to no substitution
+  for that map otherwise. For predictable behaviour, prefer `DataMap` subclasses
+  over raw dicts when the placeholder syntax matters.
+</Tip>

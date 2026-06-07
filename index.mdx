@@ -1,20 +1,78 @@
 ---
-title: "Introduction"
-description: "Welcome to your project"
+title: "mapres: Powerful Python String Mapping Utility"
+sidebarTitle: "Home"
+description: "mapres resolves placeholders in strings using layered data maps, custom syntax patterns, pipelines, and built-in color and time maps."
 ---
 
-Write a short description of your product here. What it does, who it's for, and what they can accomplish with it.
+mapres is a Python library for resolving placeholder strings using structured, layered data maps. Define your template context as typed Python dataclasses, compose maps in priority-ordered layers, and let mapres handle substitution — with support for multiple syntax styles, recursive resolution, pipeline transforms, and built-in color and time utilities.
 
-<Tip>
-  Ready to make this your own? Start by editing this page. Update your `docs.json` file to customize your site. Then fill out the [Quickstart](/quickstart) page.
-</Tip>
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install mapres from PyPI and get your environment set up in seconds.
+  </Card>
+  <Card title="Quickstart" icon="bolt" href="/quickstart">
+    Resolve your first placeholder string in under five minutes.
+  </Card>
+  <Card title="Core Concepts" icon="layer-group" href="/concepts/datamaps">
+    Understand DataMaps, the Resolver, Layers, and Syntax patterns.
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/map-resolver">
+    Full reference for every class, method, and decorator in mapres.
+  </Card>
+</CardGroup>
 
-<Card title="Quickstart" icon="rocket" href="/quickstart">
-  This card links to the quickstart page in your project.
-</Card>
-<Card title="Components" icon="puzzle-piece" href="https://mintlify.com/docs/components">
-  Add cards, callouts, steps, tabs, and more to design and structure your pages.
-</Card>
-<Card title="Settings" icon="gear" href="https://mintlify.com/docs/organize/settings">
-  Set your site name, branding, and navigation in the `docs.json` file.
-</Card>
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Multiple Syntax Styles" icon="brackets-curly">
+    Choose from `{braces}`, `${dollars}`, `<angles>`, or `%percents%` — or define your own regex pattern.
+  </Card>
+  <Card title="Layered Resolution" icon="stack">
+    Stack maps with priority ordering so overrides and fallbacks work naturally across any context.
+  </Card>
+  <Card title="@datamap Decorator" icon="tag">
+    Turn any Python dataclass into a typed template context with a single decorator.
+  </Card>
+  <Card title="Built-in Maps" icon="palette">
+    Ship with ColorMap (ANSI + Minecraft) and TimeMap (dynamic date/time with timezone support).
+  </Card>
+  <Card title="Pipeline Transforms" icon="pipe-section">
+    Chain custom text transformation functions before or after map substitution.
+  </Card>
+  <Card title="LRU Caching" icon="bolt">
+    Enable built-in LRU caching for high-throughput repeated resolution with zero extra dependencies.
+  </Card>
+</CardGroup>
+
+## Get Started
+
+<Steps>
+  <Step title="Install mapres">
+    ```bash
+    pip install mapres
+    ```
+  </Step>
+  <Step title="Define a DataMap">
+    ```python
+    from mapres import datamap
+
+    @datamap
+    class Greeting:
+        name: str = "World"
+        version: str = "1.0"
+    ```
+  </Step>
+  <Step title="Resolve a string">
+    ```python
+    from mapres import MapResolver, Layer, LayerStack
+
+    stack = LayerStack([Layer("base", [Greeting()])])
+    resolver = MapResolver(layers=stack)
+    result = resolver.res("Hello, {name}! Version {version}")
+    # → "Hello, World! Version 1.0"
+    ```
+  </Step>
+  <Step title="Explore built-in maps">
+    Check out [ColorMap](/maps/color) for ANSI and Minecraft color codes, and [TimeMap](/maps/time) for live date/time placeholders.
+  </Step>
+</Steps>

@@ -1,0 +1,136 @@
+---
+title: "ColorMap API Reference"
+sidebarTitle: "ColorMap"
+description: "API reference for ColorMap and the three built-in instances: ascii_colors (ANSI), mc_colors (Minecraft), and strip_colors. Uses angle-bracket syntax by default."
+---
+
+`ColorMap` is a `DataMap` subclass that maps color name tokens to ANSI escape codes or Minecraft color codes using angle-bracket syntax (`<color>`). It is the primary way to apply terminal or in-game color formatting through a `MapResolver` pipeline — every color field resolves to its corresponding escape sequence at resolution time.
+
+## Import
+
+```python
+from mapres import ColorMap, ascii_colors, mc_colors, strip_colors
+# or via the maps namespace:
+from mapres import maps
+maps.ascii_colors
+maps.mc_colors
+maps.strip_colors
+```
+
+## ColorMap class
+
+`ColorMap` extends `DataMap` and is decorated with `@datamap(syntax=syntax.angles)`, which sets its placeholder syntax to `<name>` (angle brackets). All 19 color fields are defined as annotated string attributes with default values equal to their ANSI escape codes.
+
+### Constructor
+
+<ParamField body="**field_overrides" type="str" optional>
+  Any of the 19 named color fields (`black`, `dark_blue`, `dark_green`, etc.) passed as keyword arguments to override their default ANSI values. Used internally to produce `mc_colors` and `strip_colors`.
+</ParamField>
+
+```python
+# Default instance (ANSI codes)
+cm = ColorMap()
+
+# Override individual fields
+cm = ColorMap(red="\033[31m", bold="")
+```
+
+### Methods
+
+#### `as_dict() -> dict`
+
+Returns a dictionary keyed by `<name>` tokens rather than plain field names, mapping each token to its current value.
+
+```python
+cm = ColorMap()
+cm.as_dict()
+# {"<black>": "\033[30m", "<dark_blue>": "\033[34m", ...}
+```
+
+### Fields
+
+All 19 fields defined on `ColorMap`, with their default ANSI values:
+
+| Field | Type | Default (ANSI) |
+|---|---|---|
+| `black` | `str` | `\033[30m` |
+| `dark_blue` | `str` | `\033[34m` |
+| `dark_green` | `str` | `\033[32m` |
+| `dark_aqua` | `str` | `\033[36m` |
+| `dark_red` | `str` | `\033[31m` |
+| `dark_purple` | `str` | `\033[35m` |
+| `gold` | `str` | `\033[33m` |
+| `gray` | `str` | `\033[37m` |
+| `dark_gray` | `str` | `\033[90m` |
+| `blue` | `str` | `\033[94m` |
+| `green` | `str` | `\033[92m` |
+| `aqua` | `str` | `\033[96m` |
+| `red` | `str` | `\033[91m` |
+| `light_purple` | `str` | `\033[95m` |
+| `yellow` | `str` | `\033[93m` |
+| `white` | `str` | `\033[97m` |
+| `reset` | `str` | `\033[0m` |
+| `bold` | `str` | `\033[1m` |
+| `italic` | `str` | `\033[3m` |
+
+## Built-in instances
+
+Three ready-to-use `ColorMap` instances are exported from `mapres` and the `maps` namespace:
+
+| Instance | Description | Example value for `red` |
+|---|---|---|
+| `ascii_colors` | Maps all color names to ANSI `\033[...m` escape codes for terminal output | `\033[91m` |
+| `mc_colors` | Maps all color names to Minecraft `§X` color codes for in-game text formatting | `§c` |
+| `strip_colors` | Maps all color names to an empty string, effectively removing color tokens from the output | `""` |
+
+## Color reference table
+
+Full mapping of every color name to its ANSI code and Minecraft code:
+
+| Color name | ANSI code | Minecraft code |
+|---|---|---|
+| `black` | `\033[30m` | `§0` |
+| `dark_blue` | `\033[34m` | `§1` |
+| `dark_green` | `\033[32m` | `§2` |
+| `dark_aqua` | `\033[36m` | `§3` |
+| `dark_red` | `\033[31m` | `§4` |
+| `dark_purple` | `\033[35m` | `§5` |
+| `gold` | `\033[33m` | `§6` |
+| `gray` | `\033[37m` | `§7` |
+| `dark_gray` | `\033[90m` | `§8` |
+| `blue` | `\033[94m` | `§9` |
+| `green` | `\033[92m` | `§a` |
+| `aqua` | `\033[96m` | `§b` |
+| `red` | `\033[91m` | `§c` |
+| `light_purple` | `\033[95m` | `§d` |
+| `yellow` | `\033[93m` | `§e` |
+| `white` | `\033[97m` | `§f` |
+| `reset` | `\033[0m` | `§r` |
+| `bold` | `\033[1m` | `§l` |
+| `italic` | `\033[3m` | `§o` |
+
+## Usage example with MapResolver
+
+Pass any `ColorMap` instance as a layer to a `MapResolver` to resolve color tokens inside your strings:
+
+```python
+from mapres import MapResolver, ascii_colors, mc_colors, strip_colors
+
+resolver = MapResolver(ascii_colors)
+print(resolver.res("<red>Hello, world!<reset>"))
+# \033[91mHello, world!\033[0m
+
+# Switch to Minecraft codes by swapping the layer
+mc_resolver = MapResolver(mc_colors)
+print(mc_resolver.res("<gold>Welcome<reset>"))
+# §6Welcome§r
+
+# Strip all color tokens entirely
+strip_resolver = MapResolver(strip_colors)
+print(strip_resolver.res("<bold>Clean text<reset>"))
+# Clean text
+```
+
+<Note>
+  `ColorMap` uses angle-bracket syntax — only tokens wrapped in `<` and `>` are matched and substituted. Strings containing `{braces}` or `${dollars}` placeholders are not affected by `ColorMap` substitution and pass through unchanged.
+</Note>

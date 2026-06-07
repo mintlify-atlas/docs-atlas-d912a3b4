@@ -1,0 +1,185 @@
+---
+title: "MapResolver: The Core Resolution Engine"
+sidebarTitle: "Resolver"
+description: "MapResolver orchestrates placeholder resolution through layered maps, syntax providers, pipeline stages, context substitution, and optional LRU caching."
+---
+
+`MapResolver` is the central engine in mapres. It coordinates every step needed to turn a template string containing placeholders into a fully-resolved output string. A single `MapResolver` instance holds your layers, syntax providers, pipeline stages, and cache configuration, giving you one composable object that you can share across an entire application or configure per use-case.
+
+---
+
+## How resolution works
+
+Each call to `res()` drives four internal steps **in this exact order** for every pass through the text:
+
+1. **Pipeline** — each stage function in `self.pipeline` receives `(text, ctx, resolver)` and returns a transformed string. Stages run first so they can pre-process or sanitize input before any pattern matching occurs.
+
+2. **Syntax providers** — each provider in `self.syntax` supplies a regex `pattern` and a `get_map(ctx, resolver)` method. The resolver substitutes all matches of that pattern using the provider's map.
+
+3. **Layered maps** — the `LayerStack` is iterated in priority order. For every DataMap or plain `dict` found across all layers, the resolver collects the unique set of syntax patterns in use, then substitutes all matching placeholders by looking up keys across layers in order (first layer that has the key wins).
+
+4. **Context substitution** — any remaining `{key}` placeholders (always brace syntax) are resolved against the `**ctx` keyword arguments passed to `res()`.
+
+The four steps are encapsulated in `_resolve_once()`:
+
+```python
+def _resolve_once(self, text: str, ctx: dict, layerstack: LayerStack) -> str:
+    text = self._apply_pipeline(text, ctx)
+    text = self._apply_syntax(text, ctx)
+    text = self._apply_maps(text, ctx, layerstack)
+    text = self._apply_ctx(text, ctx)
+    return text
+```
+
+---
+
+## Recursive resolution
+
+After one pass, the resolved string may still contain placeholders — for example, a map value itself contained `{another_key}`. `_recursive()` keeps calling `_resolve_once()` until the text stops changing or `max_depth` passes are exhausted:
+
+```python
+def _recursive(self, text: str, ctx: dict, layerstack: LayerStack) -> str:
+    current = text
+    for _ in range(self.max_depth):
+        result = self._resolve_once(current, ctx, layerstack)
+        if result == current:
+            return result
+        current = result
+    return current
+```
+
+The early-exit condition (`result == current`) means that strings with no further placeholders converge immediately, so `max_depth` only matters for deeply nested templates.
+
+<Note>
+The default `max_depth` is **5**. Increase it if your templates have more than five levels of nesting; decrease it to `1` if you want a strict single-pass guarantee.
+</Note>
+
+---
+
+## Constructor parameters
+
+```python
+class MapResolver:
+    def __init__(
+        self,
+        layers: list | None = None,
+        syntax: list | None = None,
+        pipeline: list | None = None,
+        cache: bool = False,
+        cache_size: int = 1024,
+        max_depth: int = 5,
+    ):
+        ...
+```
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `layers` | `list \| None` | `None` | A `LayerStack` or list of `Layer` objects that supply the maps. Defaults to an empty `LayerStack`. |
+| `syntax` | `list \| None` | `None` | A list of syntax provider objects, each exposing a `.pattern` string and a `.get_map(ctx, resolver)` method. |
+| `pipeline` | `list \| None` | `None` | An ordered list of callables `(text, ctx, resolver) -> str` that pre-process text before map substitution. |
+| `cache` | `bool` | `False` | Enable the internal LRU cache. Cached results are keyed on `(text, sorted_ctx_items)`. |
+| `cache_size` | `int` | `1024` | Maximum number of entries the LRU cache holds before evicting the oldest. |
+| `max_depth` | `int` | `5` | Maximum number of recursive resolution passes before the result is returned as-is. |
+
+<Warning>
+Caching is skipped automatically when `extra_maps` or `override_maps` are provided to `res()`, because those arguments alter the layer configuration per-call and cached results would be incorrect.
+</Warning>
+
+---
+
+## The `res()` method
+
+`res()` is the single public entry point for resolving a template string:
+
+```python
+def res(
+    self,
+    text: str,
+    *,
+    extra_maps: dict | None = None,
+    override_maps: dict | None = None,
+    **ctx,
+) -> str:
+```
+
+| Argument | Description |
+|---|---|
+| `text` | The template string containing placeholders to resolve. |
+| `extra_maps` | A list of maps (DataMap instances or plain dicts) appended as a new `Layer` with `priority=999` — i.e. they act as **low-priority fallbacks** behind all existing layers. |
+| `override_maps` | A list of maps used to build a **completely fresh** `LayerStack` containing only a single `"override"` layer at `priority=0`. The resolver's own `self.layers` are **ignored** for this call. |
+| `**ctx` | Arbitrary keyword arguments available as context for the brace-syntax context substitution step and accessible inside pipeline/syntax-provider callbacks. |
+
+### `extra_maps` vs `override_maps`
+
+```python
+resolver = MapResolver(layers=LayerStack([base_layer]))
+
+# extra_maps: base_layer still consulted; extra appended as fallback
+result = resolver.res("{greeting}", extra_maps=[{"greeting": "Hi"}])
+
+# override_maps: base_layer ignored entirely; only override_maps used
+result = resolver.res("{greeting}", override_maps=[{"greeting": "Hey"}])
+```
+
+Both parameters bypass the cache.
+
+---
+
+## The global `res()` function
+
+For quick scripts and prototyping, mapres ships a module-level `res()` function backed by a default `MapResolver()` instance with no layers, no syntax providers, no pipeline, and no cache:
+
+```python
+from mapres import res
+
+resolved = res("Hello, {name}!", name="mapres")
+# → "Hello, mapres!"
+```
+
+```python
+# Definition in resolver.py
+_DEFAULT = MapResolver()
+
+def res(text: str, **ctx) -> str:
+    """Resolve using the global default resolver."""
+    return _DEFAULT.res(text, **ctx)
+```
+
+<Tip>
+Use the global `res()` for one-off context substitution where you don't need layers or caching. For any production workload — especially where you want layers, caching, or a pipeline — instantiate your own `MapResolver`.
+</Tip>
+
+---
+
+## Practical example
+
+```python
+from mapres import MapResolver, Layer, LayerStack, datamap, syntax
+
+@datamap
+class AppMap:
+    app_name: str = "Acme"
+    env: str = "production"
+
+@datamap
+class UrlMap:
+    base_url: str = "https://{app_name}.example.com"
+
+# Build a stack with two layers
+base_layer = Layer("base", maps=[AppMap(), UrlMap()], priority=0)
+stack = LayerStack([base_layer])
+
+resolver = MapResolver(layers=stack, cache=True, max_depth=3)
+
+# Simple resolution
+print(resolver.res("App: {app_name} | Env: {env}"))
+# → "App: Acme | Env: production"
+
+# Nested resolution: {base_url} contains {app_name}, resolved in second pass
+print(resolver.res("Endpoint: {base_url}/api/v1"))
+# → "Endpoint: https://Acme.example.com/api/v1"
+
+# Per-call context override
+print(resolver.res("Hello from {env}!", env="staging"))
+# → "Hello from staging!"
+```

@@ -1,0 +1,135 @@
+---
+title: "Speed Up Resolution with LRU Caching"
+sidebarTitle: "Caching"
+description: "Enable mapres's built-in LRU cache to avoid redundant resolution of repeated template strings, improving throughput in high-volume applications."
+---
+
+mapres includes a built-in LRU (Least Recently Used) cache that memoizes resolution results keyed on the input text and context kwargs. When a template string and its associated context have been resolved before, the cached result is returned immediately — skipping the pipeline, syntax providers, and map substitution entirely.
+
+## Enabling the cache
+
+Pass `cache=True` to the `MapResolver` constructor. Use `cache_size` to control how many distinct entries the cache can hold before it starts evicting the oldest ones (default is `1024`):
+
+```python
+from mapres import MapResolver
+
+resolver = MapResolver(cache=True, cache_size=2048)
+
+# First call — resolved normally and stored in cache
+result = resolver.res("Hello, {name}!", name="Alice")
+
+# Second call with identical text + context — served from cache
+result = resolver.res("Hello, {name}!", name="Alice")
+```
+
+<Tip>
+Set `cache_size` to match the number of distinct template strings your application uses. Over-sizing wastes memory; under-sizing causes frequent evictions that reduce the benefit of caching.
+</Tip>
+
+## How the cache key works
+
+The cache key is a tuple of the raw input text and the sorted context items:
+
+```python
+key = (text, tuple(sorted(ctx.items())))
+```
+
+This means two calls with the same template and the same kwargs — regardless of kwarg insertion order — share a single cache entry.
+
+However, calls that use `extra_maps` or `override_maps` **bypass the cache entirely**. Looking at the `res()` implementation:
+
+```python
+def res(self, text, *, extra_maps=None, override_maps=None, **ctx) -> str:
+    if override_maps is not None:
+        temp = LayerStack([Layer("override", override_maps, priority=0)])
+        return self._recursive(text, ctx, temp)   # no cache check
+
+    if extra_maps:
+        temp = self.layers.clone()
+        temp.add_layer(Layer("extra", extra_maps, priority=999))
+        return self._recursive(text, ctx, temp)   # no cache check
+
+    if self.cache_enabled:
+        key = (text, tuple(sorted(ctx.items())))
+        cached = self.cache.get(key)
+        if cached is not None:
+            return cached
+    ...
+```
+
+If you rely on `extra_maps` or `override_maps` frequently, caching will not benefit those calls.
+
+## The LRUCache class
+
+The internal cache is implemented by `LRUCache`, a lightweight dictionary-backed store that evicts the oldest inserted entry once it reaches capacity:
+
+```python
+from mapres.cache import LRUCache
+
+cache = LRUCache(max_size=512)
+cache.set(("template", (("name", "Alice"),)), "Hello, Alice!")
+value = cache.get(("template", (("name", "Alice"),)))  # → "Hello, Alice!"
+```
+
+| Parameter  | Type  | Default | Description                                 |
+|------------|-------|---------|---------------------------------------------|
+| `max_size` | `int` | `1024`  | Maximum number of entries before eviction   |
+
+When the cache is full, the entry at the front of the internal dict (the oldest insertion) is removed to make room. `LRUCache` is not part of the public API and you should not need to interact with it directly — `MapResolver` manages it for you.
+
+## When to use caching
+
+Caching works best when the same template strings appear repeatedly with the same context values, and when your maps hold **static** data:
+
+<CodeGroup>
+```python Good fit — static message templates
+from mapres import MapResolver, datamap
+
+@datamap
+class Phrases:
+    greeting: str = "Hello"
+    farewell: str = "Goodbye"
+
+resolver = MapResolver(
+    layers=[],
+    cache=True,
+    cache_size=256,
+)
+
+# Called thousands of times with a small set of distinct inputs
+for user in users:
+    msg = resolver.res("{greeting}, {name}!", name=user)
+```
+
+```python Bad fit — dynamic time values
+from mapres import MapResolver, TimeMap
+
+# DO NOT do this — TimeMap returns different values each call
+resolver = MapResolver(cache=True)
+resolver.layers.add_layer(...)  # contains TimeMap
+
+# The first call result is cached; every subsequent call returns
+# the same frozen timestamp instead of the current time.
+msg = resolver.res("It is now %hh%:%mm%:%ss%")
+```
+</CodeGroup>
+
+<Warning>
+Do **not** enable caching when your `LayerStack` contains `TimeMap` or any `mode='dynamic'` `DataMap`. The cache will return stale values — for example, a timestamp captured on the first call — on every subsequent identical call.
+</Warning>
+
+## Cache invalidation
+
+There is no explicit cache-clearing API on `MapResolver`. If your maps change or you need a fresh cache, create a new resolver instance:
+
+```python
+from mapres import MapResolver
+
+# Old resolver — may have stale cached entries
+old_resolver = MapResolver(cache=True)
+
+# Fresh resolver — empty cache, picks up any new map data
+fresh_resolver = MapResolver(cache=True, cache_size=1024)
+```
+
+Because resolvers are lightweight objects, constructing a new one is inexpensive and is the recommended invalidation strategy.

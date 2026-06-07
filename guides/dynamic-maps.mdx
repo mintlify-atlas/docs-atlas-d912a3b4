@@ -1,0 +1,144 @@
+---
+title: "Build Dynamic DataMaps with Runtime-Evaluated Values"
+sidebarTitle: "Dynamic Maps"
+description: "Dynamic mode DataMaps evaluate callable field values or provider functions at resolution time, enabling runtime context like live timestamps, counters, or external data."
+---
+
+By default, `DataMap` fields hold static values captured when the instance is created. With `mode='dynamic'`, fields can be callables or driven by a `providers` dict, evaluated fresh on every call to `as_map()`. This makes it straightforward to embed runtime context — live timestamps, incrementing counters, responses from external services — directly inside a map without changing the rest of the resolution pipeline.
+
+## Enabling dynamic mode
+
+Apply the `@datamap` decorator with `mode='dynamic'`:
+
+```python
+from mapres import datamap
+
+@datamap(mode='dynamic')
+class MyMap:
+    label: str = "static value"
+```
+
+You can combine `mode='dynamic'` with any syntax style:
+
+```python
+from mapres import datamap, syntax
+
+@datamap(syntax=syntax.percents, mode='dynamic')
+class MyMap:
+    label: str = "static value"
+```
+
+Supported syntax options are `syntax.braces` (`{key}`), `syntax.dollars` (`${key}`), `syntax.angles` (`<key>`), and `syntax.percents` (`%key%`).
+
+## Callable fields
+
+When `mode='dynamic'` is set, any field whose value is callable is invoked with no arguments during `as_map()`. The return value of the callable becomes the field's resolved value for that call:
+
+```python
+import time
+from mapres import datamap
+
+@datamap(mode='dynamic')
+class LiveMap:
+    timestamp: str = lambda: str(int(time.time()))
+    counter: int = 0  # static field — still works fine
+```
+
+Each call to `LiveMap().as_map()` will invoke the `timestamp` lambda and capture the current Unix epoch, while `counter` returns `0` unchanged:
+
+```python
+m = LiveMap()
+print(m.as_map())
+# → {'timestamp': '1718000000', 'counter': 0}
+
+import time; time.sleep(1)
+print(m.as_map())
+# → {'timestamp': '1718000001', 'counter': 0}
+```
+
+<Note>
+Static fields still work in dynamic mode — only fields that are callable, or that appear in the `providers` dict, receive dynamic treatment. Everything else is returned as-is.
+</Note>
+
+## The providers dict
+
+For more control, define a `providers` property that returns a `dict` mapping field names to zero-argument callables. When `as_map()` runs, it checks `providers` first — if a field name is present, the associated callable is used instead of the field's stored value.
+
+This is exactly how the built-in `TimeMap` is implemented:
+
+```python
+from mapres.datamap import datamap, syntax
+
+@datamap(syntax=syntax.percents, mode='dynamic')
+class TimeMap:
+    hh: str = None   # placeholder; providers dict supplies the real value
+    mm: str = None
+    ss: str = None
+    # ... other fields
+
+    @property
+    def providers(self):
+        from datetime import datetime
+        now = lambda: datetime.now()
+        return {
+            'hh': lambda: f'{now().hour:02d}',
+            'mm': lambda: f'{now().minute:02d}',
+            'ss': lambda: f'{now().second:02d}',
+        }
+```
+
+You can apply the same pattern to any map that needs external data at resolution time:
+
+```python
+from mapres import datamap
+
+def fetch_status() -> str:
+    # imagine this calls an API or reads a file
+    return "online"
+
+@datamap(mode='dynamic')
+class StatusMap:
+    status: str = None
+
+    @property
+    def providers(self):
+        return {
+            'status': fetch_status,   # called with no args during as_map()
+        }
+```
+
+<Tip>
+See the `TimeMap` source (`mapres/maps/time.py`) for a complete real-world example of the `providers` pattern, including timezone-aware datetime formatting and both 12-hour and 24-hour fields.
+</Tip>
+
+## Using dynamic maps in a resolver
+
+Dynamic `DataMap` subclasses integrate with `MapResolver` exactly like static ones — add them to a `LayerStack` and they are evaluated on every `res()` call:
+
+```python
+import time
+from mapres import MapResolver, datamap, Layer, LayerStack
+
+@datamap(mode='dynamic')
+class LiveMap:
+    timestamp: str = lambda: str(int(time.time()))
+    app: str = "myapp"   # static field alongside a dynamic one
+
+layer = Layer("live", [LiveMap()], priority=10)
+stack = LayerStack([layer])
+
+resolver = MapResolver(layers=stack)
+
+print(resolver.res("App: {app} — started at {timestamp}"))
+# → "App: myapp — started at 1718000000"
+
+time.sleep(1)
+print(resolver.res("App: {app} — started at {timestamp}"))
+# → "App: myapp — started at 1718000001"  ← fresh timestamp each call
+```
+
+Because `as_map()` is called anew on every resolution pass, the `timestamp` field reflects the actual time of each `res()` invocation rather than the time the `LayerStack` was built.
+
+<Warning>
+Do **not** combine dynamic maps with the resolver's built-in cache (`cache=True`). The cache stores the resolved string after the first call and returns it verbatim on subsequent calls, preventing dynamic fields from being re-evaluated. See the [Caching guide](/guides/caching) for details.
+</Warning>

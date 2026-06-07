@@ -1,0 +1,212 @@
+---
+title: "MapResolver API Reference"
+sidebarTitle: "MapResolver"
+description: "Full API reference for MapResolver — mapres's core resolution engine. Documents the constructor, res() method, pipeline, syntax providers, and the global res() shortcut."
+---
+
+`MapResolver` is the central class in mapres. It combines layers, syntax providers, a pipeline, and context substitution into a single resolution call. When `res()` is invoked, it passes the input text through each processing stage — pipeline transforms, syntax provider substitutions, layered map lookups, and finally context variable replacement — repeating these passes recursively until the output stabilises or `max_depth` is reached.
+
+## Import
+
+```python
+from mapres import MapResolver, res
+```
+
+---
+
+## Constructor
+
+### `MapResolver(layers, syntax, pipeline, cache, cache_size, max_depth)`
+
+Creates a new resolver instance with the given configuration.
+
+```python
+resolver = MapResolver(
+    layers=my_stack,
+    syntax=[my_syntax_provider],
+    pipeline=[my_transform],
+    cache=True,
+    cache_size=512,
+    max_depth=10,
+)
+```
+
+<ParamField path="layers" type="list | None" default="LayerStack()">
+  A `LayerStack` instance or a list of `Layer` objects that define the ordered
+  map sources used during resolution. When `None` or omitted, an empty
+  `LayerStack` is used and no map lookups are performed.
+</ParamField>
+
+<ParamField path="syntax" type="list | None" default="[]">
+  A list of syntax provider objects. Each provider must expose a `.pattern`
+  attribute (regex string) and a `.get_map(ctx, resolver)` method that returns a
+  dict of substitution keys. Providers are applied in list order before layered
+  map resolution.
+</ParamField>
+
+<ParamField path="pipeline" type="list | None" default="[]">
+  A list of callables with the signature `(text: str, ctx: dict, resolver: MapResolver) -> str`.
+  Pipeline stages are applied first in each resolution pass, before syntax
+  providers or map lookups. Any exception raised inside a stage is wrapped in a
+  `MapResError`.
+</ParamField>
+
+<ParamField path="cache" type="bool" default="false">
+  When `True`, resolved results are stored in an internal LRU cache keyed by
+  `(text, sorted_ctx_items)`. Cache is bypassed entirely when `extra_maps` or
+  `override_maps` are supplied to `res()`.
+</ParamField>
+
+<ParamField path="cache_size" type="int" default="1024">
+  Maximum number of entries held in the LRU cache. Once the limit is reached,
+  the oldest entry is evicted before a new one is inserted.
+</ParamField>
+
+<ParamField path="max_depth" type="int" default="5">
+  Maximum number of recursive resolution passes. Each pass runs the full
+  pipeline → syntax → maps → context sequence. Iteration stops early if a pass
+  produces no change in the output string.
+</ParamField>
+
+---
+
+## Instance method — `res()`
+
+### `res(text, *, extra_maps=None, override_maps=None, **ctx) -> str`
+
+Resolves a template string against the resolver's configured layers, syntax
+providers, pipeline, and any additional context passed as keyword arguments.
+
+```python
+result = resolver.res(
+    "Hello, {name}! Your role is {role}.",
+    name="Alice",
+    role="admin",
+)
+# "Hello, Alice! Your role is admin."
+```
+
+<ParamField path="text" type="str" required>
+  The template string to resolve. Placeholders inside the string are matched
+  against the configured syntax patterns and replaced with values drawn from
+  the layer stack, syntax providers, or context kwargs.
+</ParamField>
+
+<ParamField path="extra_maps" type="dict | None" default="None">
+  An additional key-value map merged into a temporary `Layer` named `"extra"`
+  with `priority=999` (lowest priority — queried last). The resolver's existing
+  layer stack is cloned and the extra layer is appended, leaving the original
+  stack unchanged. Cache is not consulted when this argument is provided.
+</ParamField>
+
+<ParamField path="override_maps" type="dict | None" default="None">
+  When set, **replaces** the entire layer stack with a single temporary `Layer`
+  named `"override"` at `priority=0`. All other configured layers are ignored
+  for this call. Cache is not consulted when this argument is provided.
+</ParamField>
+
+<ParamField path="**ctx" type="kwargs">
+  Arbitrary keyword arguments passed as the resolution context. Context values
+  are substituted in the final stage of each resolution pass using
+  `syntax.braces` (`{key}` placeholders). Context keys also act as a fallback
+  during map lookups if a key is not found in any layer.
+</ParamField>
+
+**Returns:** `str` — the fully resolved string after all passes complete.
+
+**Raises:**
+
+| Exception | When |
+|---|---|
+| `MapResError` | Base error; wraps unexpected resolver failures and pipeline stage errors. |
+| `MissingKeyError` | A placeholder key could not be found in any layer, syntax provider, or context. Subclass of `MapResError`. |
+| `MapSyntaxError` | A regex pattern (from a syntax provider, layer, or context) is malformed. Subclass of `MapResError`. |
+
+<Note>
+  `extra_maps` and `override_maps` are mutually exclusive — if both are
+  provided, `override_maps` takes precedence and `extra_maps` is ignored.
+</Note>
+
+---
+
+## Global `res()` function
+
+### `res(text, **ctx) -> str`
+
+A module-level shortcut that resolves `text` using a shared default
+`MapResolver` instance created with no layers, no syntax providers, and no
+pipeline. It is equivalent to calling `MapResolver().res(text, **ctx)` and is
+intended for quick, layer-free context substitutions.
+
+```python
+from mapres import res
+
+greeting = res("Hello, {name}!", name="World")
+# "Hello, World!"
+```
+
+<ParamField path="text" type="str" required>
+  The template string to resolve.
+</ParamField>
+
+<ParamField path="**ctx" type="kwargs">
+  Key-value pairs injected as the resolution context. Placeholders in `text`
+  using `{key}` syntax are replaced with the matching values.
+</ParamField>
+
+**Returns:** `str` — the resolved string.
+
+<Tip>
+  Use the global `res()` for simple one-off substitutions. For anything
+  involving DataMaps, layers, or caching, construct a dedicated `MapResolver`
+  instance instead.
+</Tip>
+
+---
+
+## Complete example
+
+The following example builds a resolver with two layers — a base configuration
+layer and a per-environment override layer — then resolves a template string
+while injecting runtime context.
+
+```python
+from mapres import MapResolver, DataMap, datamap, Layer, LayerStack
+
+# Define a base DataMap
+@datamap
+class BaseConfig:
+    app_name: str = "MyApp"
+    version: str = "1.0.0"
+    env: str = "production"
+
+# Define an override DataMap for staging
+@datamap
+class StagingOverride:
+    env: str = "staging"
+    version: str = "1.1.0-rc1"
+
+# Build a two-layer stack
+#   priority=0  → queried first (highest priority)
+#   priority=10 → queried second (fallback)
+override_layer = Layer("override", [StagingOverride()], priority=0)
+base_layer     = Layer("base",     [BaseConfig()],      priority=10)
+stack = LayerStack([override_layer, base_layer])
+
+# Create the resolver
+resolver = MapResolver(layers=stack, cache=True)
+
+# Resolve a template with additional runtime context
+template = "Deploying {app_name} v{version} to {env} — initiated by {user}."
+result = resolver.res(template, user="alice")
+
+print(result)
+# Deploying MyApp v1.1.0-rc1 to staging — initiated by alice.
+```
+
+<Note>
+  Because `StagingOverride` is in the layer with `priority=0`, its `env` and
+  `version` values shadow those from `BaseConfig` (at `priority=10`). Keys not
+  present in the higher-priority layer — such as `app_name` — fall through to
+  the base layer automatically.
+</Note>
